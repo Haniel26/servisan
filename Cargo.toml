@@ -1,0 +1,40 @@
+[package]
+name = "servisan"
+version = "0.1.0"
+edition = "2021"
+description = "Lightweight, portable local PHP + MySQL server manager for Windows"
+license = "MIT"
+
+[lib]
+name = "servisan"
+path = "src/lib.rs"
+
+[[bin]]
+name = "servisan"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+serde = { version = "1", features = ["derive"] }
+sysinfo = "0.32"
+tao = "0.37.1"
+toml = "0.8"
+tray-icon = "0.26.1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_System_Console",
+] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -1,0 +1,27 @@
+# Rust build artifacts
+/target/
+
+# Release binary copied to the repo root by scripts/build-release.ps1
+/servisan.exe
+
+# Bundled binaries (large, copied from Laragon - see scripts/install-binaries.ps1)
+/bin/
+
+# Runtime data
+/data/
+/logs/
+/tmp/
+
+# User projects
+/www/*
+!/www/.gitkeep
+
+# Generated runtime config
+/config/generated/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

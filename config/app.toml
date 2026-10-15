@@ -1,0 +1,22 @@
+# Servisan configuration.
+# All values below are optional; missing fields fall back to built-in defaults.
+
+[general]
+# Web root, relative to the Servisan root directory.
+web_root = "www"
+# Interface the HTTP server binds to.
+host = "127.0.0.1"
+
+[php]
+# Informational build name (source of the binaries in bin/php).
+version = "php-8.3.30-Win32-vs16-x64"
+# HTTP engine: builtin | nginx | apache  (only "builtin" implemented in MVP).
+engine = "builtin"
+# HTTP port. 8080 avoids clashing with Laragon/Apache on port 80.
+port = 8080
+
+[mysql]
+# Informational build name (source of the binaries in bin/mysql).
+version = "mysql-8.4.3-winx64"
+# MySQL port. 3307 avoids clashing with Laragon/MySQL on port 3306.
+port = 3307
