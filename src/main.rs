@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
 
 use servisan::app::{App, ServiceKind};
 use servisan::signal;
@@ -40,6 +41,29 @@ enum Command {
         #[arg(long)]
         program: Option<String>,
     },
+    /// Manage the optional bundled phpMyAdmin.
+    #[command(name = "phpmyadmin")]
+    PhpMyAdmin {
+        #[command(subcommand)]
+        command: PhpMyAdminCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum PhpMyAdminCommand {
+    /// Copy Laragon's phpMyAdmin into Servisan's www folder and generate config.
+    Install {
+        /// Override the Laragon source folder.
+        #[arg(long)]
+        source: Option<String>,
+        /// Replace an existing phpMyAdmin copy.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Show whether phpMyAdmin is installed and its URL.
+    Status,
+    /// Open phpMyAdmin in the browser.
+    Open,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -67,6 +91,19 @@ fn main() -> Result<()> {
         Some(Command::Status) => app.status(),
         Some(Command::Stop) => app.stop_external(),
         Some(Command::Shell { program }) => app.shell(program.as_deref()),
+        Some(Command::PhpMyAdmin { command }) => match command {
+            PhpMyAdminCommand::Install { source, force } => {
+                app.install_phpmyadmin(source.map(PathBuf::from), force)
+            }
+            PhpMyAdminCommand::Status => {
+                app.status()?;
+                if let Some(url) = app.phpmyadmin_url() {
+                    println!("  phpMyAdmin URL : {url}");
+                }
+                Ok(())
+            }
+            PhpMyAdminCommand::Open => app.open_phpmyadmin(),
+        },
         Some(Command::Start { only }) => run_foreground(&app, only.map(ServiceKind::from)),
     }
 }

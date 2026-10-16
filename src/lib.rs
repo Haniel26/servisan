@@ -2,6 +2,7 @@ pub mod app;
 pub mod config;
 pub mod ini;
 pub mod paths;
+pub mod phpmyadmin;
 pub mod platform;
 pub mod process;
 pub mod services;

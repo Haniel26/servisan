@@ -3,7 +3,15 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-/// Application configuration, persisted as `config/app.toml`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PhpMyAdmin {
+    /// Whether Servisan should discover and manage phpMyAdmin under `www`.
+    pub enabled: bool,
+    /// Laragon source folder copied during `servisan phpmyadmin install`.
+    #[serde(default = "default_phpmyadmin_source")]
+    pub source: String,
+}
 ///
 /// Every section and field has a default, so a partial (or empty) file still
 /// produces a usable configuration.
@@ -13,6 +21,7 @@ pub struct Config {
     pub general: General,
     pub php: Php,
     pub mysql: Mysql,
+    pub phpmyadmin: PhpMyAdmin,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +62,19 @@ pub enum EngineKind {
     Builtin,
     Nginx,
     Apache,
+}
+
+impl Default for PhpMyAdmin {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            source: default_phpmyadmin_source(),
+        }
+    }
+}
+
+fn default_phpmyadmin_source() -> String {
+    "D:\\laragon\\etc\\apps\\phpmyadmin".to_string()
 }
 
 impl Default for General {

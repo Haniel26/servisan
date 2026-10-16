@@ -20,3 +20,10 @@ port = 8080
 version = "mysql-8.4.3-winx64"
 # MySQL port. 3307 avoids clashing with Laragon/MySQL on port 3306.
 port = 3307
+
+[phpmyadmin]
+# Set enabled = false to ignore phpMyAdmin management.
+enabled = true
+# Laragon source folder used by 'servisan phpmyadmin install' (42 MB).
+source = "D:\\laragon\\etc\\apps\\phpmyadmin"
+

@@ -20,6 +20,7 @@ const ID_STOP: &str = "servisan.stop";
 const ID_WWW: &str = "servisan.www";
 const ID_CONFIG: &str = "servisan.config";
 const ID_LOGS: &str = "servisan.logs";
+const ID_PMA: &str = "servisan.phpmyadmin";
 const ID_EXIT: &str = "servisan.exit";
 
 /// A user action triggered from the tray menu.
@@ -30,6 +31,7 @@ pub enum Action {
     OpenWww,
     OpenConfig,
     OpenLogs,
+    OpenPhpMyAdmin,
     Exit,
 }
 
@@ -41,6 +43,7 @@ fn action_for(id: &str) -> Option<Action> {
         ID_WWW => Action::OpenWww,
         ID_CONFIG => Action::OpenConfig,
         ID_LOGS => Action::OpenLogs,
+        ID_PMA => Action::OpenPhpMyAdmin,
         ID_EXIT => Action::Exit,
         _ => return None,
     })
@@ -124,6 +127,11 @@ pub fn apply_action(app: &App, running: &mut Option<Running>, action: Action) ->
         Action::OpenWww => open_path(&app.paths.www_dir()),
         Action::OpenConfig => open_path(&app.paths.config_file()),
         Action::OpenLogs => open_path(&app.paths.logs_dir()),
+        Action::OpenPhpMyAdmin => {
+            if let Err(e) = app.open_phpmyadmin() {
+                report_error(app, &format!("could not open phpMyAdmin: {e}"));
+            }
+        }
         Action::Exit => {
             if let Some(mut r) = running.take() {
                 if let Err(e) = app.stop_running(&mut r) {
@@ -168,9 +176,8 @@ fn actionable_items() -> [MenuItem; 6] {
     ]
 }
 
-/// Build the context menu, returning the menu plus the two item handles whose
-/// enabled state the event loop toggles.
-fn build_menu() -> Result<(Menu, MenuItem, MenuItem)> {
+/// Build the context menu with a variable item enabling phpMyAdmin integration.
+pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
     let [start, stop, www, config, logs, exit] = actionable_items();
 
     let menu = Menu::new();
@@ -185,14 +192,29 @@ fn build_menu() -> Result<(Menu, MenuItem, MenuItem)> {
         &exit,
     ])?;
 
+    if installed {
+        let phpmyadmin = MenuItem::with_id(
+            ID_PMA,
+            "Open phpMyAdmin",
+            true,
+            None,
+        );
+        menu.append_items(&[&PredefinedMenuItem::separator(), &phpmyadmin])?;
+    }
+
     Ok((menu, start, stop))
+}
+
+pub fn phpmyadmin_item() -> MenuItem {
+    MenuItem::with_id(ID_PMA, "Open phpMyAdmin", true, None)
 }
 
 /// Run the tray event loop until the user chooses Exit. Diverges.
 pub fn run(app: App) -> Result<()> {
     let event_loop = EventLoopBuilder::<()>::with_user_event().build();
 
-    let (menu, start, stop) = build_menu()?;
+    let installed = app.phpmyadmin_installed();
+    let (menu, start, stop) = build_menu(installed)?;
 
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
@@ -282,7 +304,7 @@ mod tests {
 
     #[test]
     fn built_menu_items_reach_the_expected_actions() {
-        let (_menu, start, stop) = build_menu().unwrap();
+        let (_menu, start, stop) = build_menu(false).unwrap();
         assert_eq!(action_for(start.id().as_ref()), Some(Action::StartAll));
         assert_eq!(action_for(stop.id().as_ref()), Some(Action::StopAll));
     }

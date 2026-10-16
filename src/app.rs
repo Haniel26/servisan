@@ -1,5 +1,5 @@
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -85,6 +85,11 @@ impl App {
     pub fn start(&self, only: Option<ServiceKind>) -> Result<Running> {
         self.ensure_dirs()?;
         crate::ini::write_all(&self.paths, &self.config)?;
+        if self.config.phpmyadmin.enabled {
+            if let Err(e) = self.ensure_phpmyadmin_configured() {
+                eprintln!("warning: phpMyAdmin configuration failed: {e}");
+            }
+        }
 
         let want_php = matches!(only, None | Some(ServiceKind::Php));
         let want_mysql = matches!(only, None | Some(ServiceKind::Mysql));
@@ -194,7 +199,11 @@ impl App {
             self.config.mysql.port
         );
         println!(
-            "  MySQL data: {}",
+            "  phpMyAdmin: {} {}",
+            if self.phpmyadmin_installed() { "installed" } else { "not installed" },
+            self.phpmyadmin_url().as_deref().unwrap_or(""),
+        );
+        println!("  MySQL data: {}",
             if MysqlService::is_initialized(&self.paths) {
                 "initialized"
             } else {
@@ -233,6 +242,53 @@ impl App {
             println!("shell exited with {status}");
         }
         Ok(())
+    }
+
+    pub fn phpmyadmin_dir(&self) -> PathBuf {
+        self.paths.phpmyadmin_dir()
+    }
+
+    pub fn phpmyadmin_installed(&self) -> bool {
+        crate::phpmyadmin::is_installed(&self.paths)
+    }
+
+    pub fn phpmyadmin_url(&self) -> Option<String> {
+        if self.phpmyadmin_installed() {
+            Some(crate::phpmyadmin::url(&self.config))
+        } else {
+            None
+        }
+    }
+
+    pub fn ensure_phpmyadmin_configured(&self) -> Result<()> {
+        if !self.phpmyadmin_installed() {
+            return Ok(());
+        }
+        crate::phpmyadmin::configure(&self.paths, &self.config)
+    }
+
+    pub fn install_phpmyadmin(&self, source: Option<PathBuf>, force: bool) -> Result<()> {
+        crate::phpmyadmin::install(&self.paths, &self.config, source, force)?;
+        if self.config.phpmyadmin.enabled {
+            self.ensure_phpmyadmin_configured()?;
+        }
+        println!("phpMyAdmin installed at {}", self.phpmyadmin_dir().display());
+        if let Some(url) = self.phpmyadmin_url() {
+            println!("phpMyAdmin URL: {url}");
+        }
+        println!("done.");
+        Ok(())
+    }
+
+    pub fn open_phpmyadmin(&self) -> Result<()> {
+        if !self.phpmyadmin_installed() {
+            bail!(
+                "phpMyAdmin is not installed in {}.\n\
+                 Run 'servisan phpmyadmin install' first.",
+                self.phpmyadmin_dir().display()
+            );
+        }
+        crate::phpmyadmin::open_url(&crate::phpmyadmin::url(&self.config))
     }
 
     fn http_engine(&self) -> Result<Box<dyn HttpEngine>> {

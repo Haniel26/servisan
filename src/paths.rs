@@ -113,6 +113,10 @@ impl Paths {
         self.root.join("logs")
     }
 
+    pub fn phpmyadmin_dir(&self) -> PathBuf {
+        self.www_dir().join("phpmyadmin")
+    }
+
     /// Directories that must be on `PATH` for PHP and MySQL tools to be
     /// callable: the PHP CLI and the MySQL client tools.
     pub fn path_entries(&self) -> Vec<PathBuf> {
