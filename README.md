@@ -186,8 +186,8 @@ port = 3307
 
 [phpmyadmin]
 enabled = true
-# Optional: auto-detects C:\laragon or D:\laragon, or specify any custom path
-source = "D:\\laragon\\etc\\apps\\phpmyadmin"
+# Optional: auto-detects C:\laragon or D:\laragon if empty, or specify custom path
+source = ""
 ```
 
 ---

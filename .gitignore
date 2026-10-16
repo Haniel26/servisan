@@ -25,3 +25,9 @@
 *.swp
 Thumbs.db
 desktop.ini
+
+# Internal agent memory & planning docs
+/AGENTS.md
+/AGENT.md
+/prd_rust_local_server_manager.md
+

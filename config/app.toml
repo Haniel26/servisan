@@ -29,7 +29,7 @@ port = 3307
 
 [phpmyadmin]
 # Set enabled = false to ignore phpMyAdmin management.
-enabled = true
-# Laragon source folder used by 'servisan phpmyadmin install' (42 MB).
-source = "D:\\laragon\\etc\\apps\\phpmyadmin"
+# Optional: source folder for 'servisan phpmyadmin install'.
+# If left empty, automatically checks standard Laragon paths (C:\laragon, D:\laragon).
+source = ""
 

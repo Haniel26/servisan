@@ -83,7 +83,7 @@ impl Default for PhpMyAdmin {
 }
 
 fn default_phpmyadmin_source() -> String {
-    "D:\\laragon\\etc\\apps\\phpmyadmin".to_string()
+    String::new()
 }
 
 fn default_auto_open_browser() -> bool {
