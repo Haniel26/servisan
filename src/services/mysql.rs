@@ -38,31 +38,43 @@ impl MysqlService {
         );
 
         let data = paths.data_dir();
-        if data.exists() {
-            let empty = std::fs::read_dir(&data)
-                .map(|mut it| it.next().is_none())
-                .unwrap_or(false);
-            ensure!(
-                empty,
-                "data directory {} is not empty but not a valid MySQL datadir; \
-                 delete it or point config to a new location",
-                data.display()
-            );
+        if data.exists() && !Self::is_initialized(paths) {
+            let _ = std::fs::remove_dir_all(&data);
         }
         std::fs::create_dir_all(&data).with_context(|| format!("creating {}", data.display()))?;
 
         crate::ini::write_all(paths, cfg)?;
         let ini = crate::ini::my_ini_path(paths);
 
-        let output = Command::new(&mysqld)
-            .arg(format!("--defaults-file={}", ini.display()))
-            .arg("--initialize-insecure")
-            .output()
-            .context("running mysqld --initialize-insecure")?;
+        let bin = paths.mysql_dir().join("bin");
+        let mariadb_install = bin.join("mariadb-install-db.exe");
+        let mysql_install = bin.join("mysql_install_db.exe");
+
+        let output = if mariadb_install.is_file() {
+            let mut cmd = Command::new(&mariadb_install);
+            cmd.arg(format!("--datadir={}", data.display()));
+            cmd.arg(format!("--basedir={}", paths.mysql_dir().display()));
+            cmd.current_dir(paths.mysql_dir());
+            paths.apply_path_env(&mut cmd);
+            cmd.output().context("running mariadb-install-db")?
+        } else if mysql_install.is_file() {
+            let mut cmd = Command::new(&mysql_install);
+            cmd.arg(format!("--datadir={}", data.display()));
+            cmd.arg(format!("--basedir={}", paths.mysql_dir().display()));
+            cmd.current_dir(paths.mysql_dir());
+            paths.apply_path_env(&mut cmd);
+            cmd.output().context("running mysql_install_db")?
+        } else {
+            let mut cmd = Command::new(&mysqld);
+            cmd.arg(format!("--defaults-file={}", ini.display()));
+            cmd.arg("--initialize-insecure");
+            paths.apply_path_env(&mut cmd);
+            cmd.output().context("running mysqld --initialize-insecure")?
+        };
 
         if !output.status.success() {
             bail!(
-                "mysqld --initialize-insecure failed ({}):\n{}{}",
+                "database initialization failed ({}):\n{}{}",
                 output.status,
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr),

@@ -91,6 +91,12 @@ impl Paths {
         self.mysql_dir().join("bin").join("mysqladmin.exe")
     }
 
+    /// True if the installed database server is MariaDB rather than Oracle MySQL.
+    pub fn is_mariadb(&self) -> bool {
+        let bin = self.mysql_dir().join("bin");
+        bin.join("mariadb-install-db.exe").is_file() || bin.join("mysql_install_db.exe").is_file()
+    }
+
     pub fn www_dir(&self) -> PathBuf {
         self.root.join("www")
     }
