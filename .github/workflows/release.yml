@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Portable Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build Servisan release binary
+        run: cargo build --release
+
+      - name: Download portable runtimes and phpMyAdmin
+        shell: powershell
+        run: .\scripts\install-binaries.ps1 -DownloadOfficial -IncludePhpMyAdmin
+
+      - name: Package self-contained portable release archive
+        shell: powershell
+        run: .\scripts\package-portable.ps1
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/servisan-*-portable.zip
+            target/release/servisan-*-portable.zip.sha256
+          draft: false
+          prerelease: false
+          generate_release_notes: true
