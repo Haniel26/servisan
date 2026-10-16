@@ -160,12 +160,17 @@ impl App {
         // Try a graceful MySQL shutdown first.
         let mysqladmin = self.paths.mysqladmin_exe();
         if mysqladmin.is_file() && port_open(&self.config.general.host, self.config.mysql.port) {
-            let _ = std::process::Command::new(&mysqladmin)
-                .arg("--host=127.0.0.1")
+            let mut cmd = std::process::Command::new(&mysqladmin);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+            cmd.arg("--host=127.0.0.1")
                 .arg(format!("--port={}", self.config.mysql.port))
                 .arg("--user=root")
-                .arg("shutdown")
-                .status();
+                .arg("shutdown");
+            let _ = cmd.status();
         }
 
         let killed = kill_processes_under(&self.paths.bin_dir())?;

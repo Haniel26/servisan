@@ -38,6 +38,15 @@ impl ManagedChild {
             .stdout(Stdio::from(file))
             .stderr(Stdio::from(err));
 
+        // `php.exe` and `mysqld.exe` in their console subsystem would each take
+        // a visible console. Detach that from the manager and force a hidden,
+        // windowless start, matching the portable-manager feel.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
         let child = cmd
             .spawn()
             .with_context(|| format!("failed to start '{name}' ({})", log_path.display()))?;
