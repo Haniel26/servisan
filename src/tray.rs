@@ -52,32 +52,14 @@ fn action_for(id: &str) -> Option<Action> {
 /// Generate a simple circular status icon: green when running, grey otherwise.
 fn status_icon(running: bool) -> Result<Icon> {
     const SIZE: u32 = 32;
-    let (r, g, b) = if running {
-        (46u8, 204u8, 113u8)
+    let rgba = if running {
+        include_bytes!("../assets/tray-running.rgba")
     } else {
-        (149u8, 165u8, 166u8)
+        include_bytes!("../assets/tray-stopped.rgba")
     };
 
-    let mut rgba = vec![0u8; (SIZE * SIZE * 4) as usize];
-    let center = (SIZE as f32 - 1.0) / 2.0;
-    let radius = SIZE as f32 / 2.0 - 2.0;
-
-    for y in 0..SIZE {
-        for x in 0..SIZE {
-            let dx = x as f32 - center;
-            let dy = y as f32 - center;
-            let dist = (dx * dx + dy * dy).sqrt();
-            let idx = ((y * SIZE + x) * 4) as usize;
-            if dist <= radius {
-                rgba[idx] = r;
-                rgba[idx + 1] = g;
-                rgba[idx + 2] = b;
-                rgba[idx + 3] = 255;
-            }
-        }
-    }
-
-    Icon::from_rgba(rgba, SIZE, SIZE).map_err(|e| anyhow!("building tray icon: {e}"))
+    Icon::from_rgba(rgba.to_vec(), SIZE, SIZE)
+        .map_err(|e| anyhow!("building tray icon: {e}"))
 }
 
 /// Open a file or folder in the shell's default handler.

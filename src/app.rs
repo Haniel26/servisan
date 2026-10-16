@@ -68,6 +68,7 @@ impl App {
     /// initialized MySQL data directory.
     pub fn init(&self) -> Result<()> {
         self.ensure_dirs()?;
+        self.ensure_branded_assets()?;
 
         if !self.paths.config_file().is_file() {
             self.config.save(&self.paths.config_file())?;
@@ -85,6 +86,7 @@ impl App {
     pub fn start(&self, only: Option<ServiceKind>) -> Result<Running> {
         self.ensure_dirs()?;
         crate::ini::write_all(&self.paths, &self.config)?;
+        self.ensure_branded_assets()?;
         if self.config.phpmyadmin.enabled {
             if let Err(e) = self.ensure_phpmyadmin_configured() {
                 eprintln!("warning: phpMyAdmin configuration failed: {e}");
@@ -274,6 +276,33 @@ impl App {
 
     pub fn phpmyadmin_dir(&self) -> PathBuf {
         self.paths.phpmyadmin_dir()
+    }
+
+    pub fn ensure_branded_assets(&self) -> Result<()> {
+        let assets = self.paths.root().join("assets");
+        let web_root = self.paths.www_dir();
+        std::fs::create_dir_all(&web_root)
+            .with_context(|| format!("creating {}", web_root.display()))?;
+
+        for (asset, target) in [("logo.ico", "favicon.ico"), ("logo.png", "logo.png")] {
+            let source = assets.join(asset);
+            let destination = web_root.join(target);
+            if !source.is_file() {
+                continue;
+            }
+            let source_len = source.metadata().map(|m| m.len()).unwrap_or(0);
+            let destination_len = destination.metadata().map(|m| m.len()).unwrap_or(0);
+            if !destination.is_file() || destination_len != source_len {
+                std::fs::copy(&source, &destination).with_context(|| {
+                    format!(
+                        "copying branded asset {} to {}",
+                        source.display(),
+                        destination.display()
+                    )
+                })?;
+            }
+        }
+        Ok(())
     }
 
     pub fn phpmyadmin_installed(&self) -> bool {
