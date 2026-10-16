@@ -153,18 +153,27 @@ fn detach_console() {
 #[cfg(not(windows))]
 fn detach_console() {}
 
-/// Run the tray event loop until the user chooses Exit. Diverges.
-pub fn run(app: App) -> Result<()> {
-    let event_loop = EventLoopBuilder::<()>::with_user_event().build();
+/// The actionable menu items, each created with an explicit id.
+///
+/// `MenuItem::new` mints a counter-based id ("0", "1", ...), which `action_for`
+/// could never match: the menu would open but every item would be dead.
+fn actionable_items() -> [MenuItem; 6] {
+    [
+        MenuItem::with_id(ID_START, "Start All", true, None),
+        MenuItem::with_id(ID_STOP, "Stop All", false, None),
+        MenuItem::with_id(ID_WWW, "Open www", true, None),
+        MenuItem::with_id(ID_CONFIG, "Open config", true, None),
+        MenuItem::with_id(ID_LOGS, "Open logs", true, None),
+        MenuItem::with_id(ID_EXIT, "Exit", true, None),
+    ]
+}
+
+/// Build the context menu, returning the menu plus the two item handles whose
+/// enabled state the event loop toggles.
+fn build_menu() -> Result<(Menu, MenuItem, MenuItem)> {
+    let [start, stop, www, config, logs, exit] = actionable_items();
 
     let menu = Menu::new();
-    let start = MenuItem::new("Start All", true, None);
-    let stop = MenuItem::new("Stop All", false, None);
-    let www = MenuItem::new("Open www", true, None);
-    let config = MenuItem::new("Open config", true, None);
-    let logs = MenuItem::new("Open logs", true, None);
-    let exit = MenuItem::new("Exit", true, None);
-
     menu.append_items(&[
         &start,
         &stop,
@@ -175,6 +184,15 @@ pub fn run(app: App) -> Result<()> {
         &PredefinedMenuItem::separator(),
         &exit,
     ])?;
+
+    Ok((menu, start, stop))
+}
+
+/// Run the tray event loop until the user chooses Exit. Diverges.
+pub fn run(app: App) -> Result<()> {
+    let event_loop = EventLoopBuilder::<()>::with_user_event().build();
+
+    let (menu, start, stop) = build_menu()?;
 
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
@@ -195,12 +213,19 @@ pub fn run(app: App) -> Result<()> {
 
         if let Event::NewEvents(_) = event {
             while let Ok(menu_event) = MenuEvent::receiver().try_recv() {
-                let action = action_for(menu_event.id.as_ref());
-                if let Some(action) = action {
-                    if apply_action(&app, &mut running, action) == Outcome::Exit {
-                        *control_flow = ControlFlow::ExitWithCode(0);
-                        return;
-                    }
+                // An id that maps to nothing means the menu wiring drifted; the
+                // console is gone, so record it where "Open logs" can show it.
+                let Some(action) = action_for(menu_event.id.as_ref()) else {
+                    report_error(
+                        &app,
+                        &format!("unhandled tray menu id {:?}", menu_event.id.as_ref()),
+                    );
+                    continue;
+                };
+
+                if apply_action(&app, &mut running, action) == Outcome::Exit {
+                    *control_flow = ControlFlow::ExitWithCode(0);
+                    return;
                 }
             }
 
@@ -242,6 +267,24 @@ mod tests {
     fn builds_status_icons() {
         assert!(status_icon(false).is_ok());
         assert!(status_icon(true).is_ok());
+    }
+
+    #[test]
+    fn every_actionable_menu_item_maps_to_an_action() {
+        for item in actionable_items() {
+            let id = item.id().as_ref().to_string();
+            assert!(
+                action_for(&id).is_some(),
+                "menu item with id {id:?} has no action"
+            );
+        }
+    }
+
+    #[test]
+    fn built_menu_items_reach_the_expected_actions() {
+        let (_menu, start, stop) = build_menu().unwrap();
+        assert_eq!(action_for(start.id().as_ref()), Some(Action::StartAll));
+        assert_eq!(action_for(stop.id().as_ref()), Some(Action::StopAll));
     }
 
     #[test]
