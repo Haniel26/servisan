@@ -17,6 +17,7 @@ use crate::app::{App, Running};
 
 const ID_START: &str = "servisan.start";
 const ID_STOP: &str = "servisan.stop";
+const ID_DASHBOARD: &str = "servisan.dashboard";
 const ID_WWW: &str = "servisan.www";
 const ID_CONFIG: &str = "servisan.config";
 const ID_LOGS: &str = "servisan.logs";
@@ -28,6 +29,7 @@ const ID_EXIT: &str = "servisan.exit";
 pub enum Action {
     StartAll,
     StopAll,
+    OpenDashboard,
     OpenWww,
     OpenConfig,
     OpenLogs,
@@ -40,6 +42,7 @@ fn action_for(id: &str) -> Option<Action> {
     Some(match id {
         ID_START => Action::StartAll,
         ID_STOP => Action::StopAll,
+        ID_DASHBOARD => Action::OpenDashboard,
         ID_WWW => Action::OpenWww,
         ID_CONFIG => Action::OpenConfig,
         ID_LOGS => Action::OpenLogs,
@@ -105,6 +108,11 @@ pub fn apply_action(app: &App, running: &mut Option<Running>, action: Action) ->
                 }
             }
         }
+        Action::OpenDashboard => {
+            if let Err(e) = app.open_dashboard() {
+                report_error(app, &format!("could not open dashboard: {e}"));
+            }
+        }
         Action::OpenWww => open_path(&app.paths.www_dir()),
         Action::OpenConfig => open_path(&app.paths.config_file()),
         Action::OpenLogs => open_path(&app.paths.logs_dir()),
@@ -146,10 +154,11 @@ fn detach_console() {}
 ///
 /// `MenuItem::new` mints a counter-based id ("0", "1", ...), which `action_for`
 /// could never match: the menu would open but every item would be dead.
-fn actionable_items() -> [MenuItem; 6] {
+fn actionable_items() -> [MenuItem; 7] {
     [
         MenuItem::with_id(ID_START, "Start All", true, None),
         MenuItem::with_id(ID_STOP, "Stop All", false, None),
+        MenuItem::with_id(ID_DASHBOARD, "Open Dashboard", true, None),
         MenuItem::with_id(ID_WWW, "Open www", true, None),
         MenuItem::with_id(ID_CONFIG, "Open config", true, None),
         MenuItem::with_id(ID_LOGS, "Open logs", true, None),
@@ -159,12 +168,17 @@ fn actionable_items() -> [MenuItem; 6] {
 
 /// Build the context menu with a variable item enabling phpMyAdmin integration.
 pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
-    let [start, stop, www, config, logs, exit] = actionable_items();
+    let [start, stop, dashboard, www, config, logs, exit] = actionable_items();
 
     let menu = Menu::new();
+    menu.append_items(&[&start, &stop, &PredefinedMenuItem::separator(), &dashboard])?;
+
+    if installed {
+        let phpmyadmin = MenuItem::with_id(ID_PMA, "Open phpMyAdmin", true, None);
+        menu.append_items(&[&phpmyadmin])?;
+    }
+
     menu.append_items(&[
-        &start,
-        &stop,
         &PredefinedMenuItem::separator(),
         &www,
         &config,
@@ -172,11 +186,6 @@ pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
         &PredefinedMenuItem::separator(),
         &exit,
     ])?;
-
-    if installed {
-        let phpmyadmin = MenuItem::with_id(ID_PMA, "Open phpMyAdmin", true, None);
-        menu.append_items(&[&PredefinedMenuItem::separator(), &phpmyadmin])?;
-    }
 
     Ok((menu, start, stop))
 }
@@ -275,9 +284,11 @@ mod tests {
     fn maps_menu_ids_to_actions() {
         assert_eq!(action_for(ID_START), Some(Action::StartAll));
         assert_eq!(action_for(ID_STOP), Some(Action::StopAll));
+        assert_eq!(action_for(ID_DASHBOARD), Some(Action::OpenDashboard));
         assert_eq!(action_for(ID_WWW), Some(Action::OpenWww));
         assert_eq!(action_for(ID_CONFIG), Some(Action::OpenConfig));
         assert_eq!(action_for(ID_LOGS), Some(Action::OpenLogs));
+        assert_eq!(action_for(ID_PMA), Some(Action::OpenPhpMyAdmin));
         assert_eq!(action_for(ID_EXIT), Some(Action::Exit));
         assert_eq!(action_for("unknown"), None);
     }

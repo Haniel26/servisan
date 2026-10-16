@@ -84,14 +84,16 @@ graph TD
 
 ## 🚀 Quick Start
 
-### Option 1: Standalone Portable Package (Easiest)
+### Option 1: Setup Installer (.exe) or Standalone Portable (.zip)
 
 > [!TIP]
-> **Zero Dependencies:** This package is 100% self-contained. Works immediately on **any Windows PC**—even if Laragon, XAMPP, or Docker was never installed.
+> **Zero Dependencies:** Both packages are 100% self-contained with PHP 8.3 and MariaDB 11.4 LTS runtime. Works immediately on **any Windows PC**—even if Laragon, XAMPP, or Docker was never installed.
 
-1. Download the latest `servisan-v*-portable.zip` from [GitHub Releases](https://github.com/Haniel26/servisan/releases).
-2. Extract the archive anywhere (e.g. `D:\Servisan`, `C:\Servisan`, or a portable USB drive).
-3. Double-click `servisan.exe`.
+- **Setup Installer (`servisan-v*-setup.exe`)**: Easy one-click setup wizard that installs Servisan to `C:\Servisan` with optional Desktop shortcut and automatic startup.
+- **Standalone Portable (`servisan-v*-portable.zip`)**: Zero installation required. Simply extract the archive anywhere (e.g. `D:\Servisan`, `C:\Servisan`, or a USB drive) and run `servisan.exe`.
+
+1. Download your preferred package from [GitHub Releases](https://github.com/Haniel26/servisan/releases).
+2. Launch `servisan.exe` (or run the installer).
    > [!NOTE]
    > **Runs in System Tray:** Servisan operates without opening an intrusive desktop window or black console popup. It sits quietly in the **Windows System Tray** (notification area near the clock, or inside the `^` overflow arrow).
 4. The tray icon lights up green (🟢) and automatically opens `http://127.0.0.1:8080/` in your default browser. Right-click the tray icon at any time to start/stop services, open folders, or access phpMyAdmin.

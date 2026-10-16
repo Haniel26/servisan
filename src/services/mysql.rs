@@ -69,7 +69,8 @@ impl MysqlService {
             cmd.arg(format!("--defaults-file={}", ini.display()));
             cmd.arg("--initialize-insecure");
             paths.apply_path_env(&mut cmd);
-            cmd.output().context("running mysqld --initialize-insecure")?
+            cmd.output()
+                .context("running mysqld --initialize-insecure")?
         };
 
         if !output.status.success() {

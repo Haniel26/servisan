@@ -44,12 +44,18 @@ jobs:
         shell: powershell
         run: .\scripts\package-portable.ps1
 
+      - name: Build Windows setup installer
+        shell: powershell
+        run: .\scripts\build-installer.ps1
+
       - name: Create GitHub Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
             target/release/servisan-*-portable.zip
             target/release/servisan-*-portable.zip.sha256
+            target/release/servisan-*-setup.exe
+            target/release/servisan-*-setup.exe.sha256
           draft: false
           prerelease: false
           generate_release_notes: true

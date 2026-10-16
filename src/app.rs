@@ -148,13 +148,12 @@ impl App {
         }
 
         if want_php && self.config.general.auto_open_browser {
-            let raw_host = self.config.general.host.as_str();
-            let browser_host = if raw_host == "0.0.0.0" {
+            let url = self.web_url();
+            let browser_host = if self.config.general.host == "0.0.0.0" {
                 "127.0.0.1"
             } else {
-                raw_host
+                self.config.general.host.as_str()
             };
-            let url = format!("http://{}:{}/", browser_host, self.config.php.port);
 
             // Keep the worker ready before launching the browser.
             std::thread::sleep(Duration::from_millis(500));
@@ -359,6 +358,20 @@ impl App {
         }
         println!("done.");
         Ok(())
+    }
+
+    pub fn web_url(&self) -> String {
+        let raw_host = self.config.general.host.as_str();
+        let browser_host = if raw_host == "0.0.0.0" {
+            "127.0.0.1"
+        } else {
+            raw_host
+        };
+        format!("http://{}:{}/", browser_host, self.config.php.port)
+    }
+
+    pub fn open_dashboard(&self) -> Result<()> {
+        crate::phpmyadmin::open_url(&self.web_url())
     }
 
     pub fn open_phpmyadmin(&self) -> Result<()> {
