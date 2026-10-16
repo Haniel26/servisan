@@ -13,6 +13,12 @@
 [![Memory Footprint](https://img.shields.io/badge/RAM_%20Footprint-%3C_15_MB-brightgreen)](#-why-servisan-vs-alternatives)
 [![Process Safety](https://img.shields.io/badge/Process_Safety-Windows_Job_Object-success)](#-architecture)
 
+<br><br>
+
+<img src="assets/dashboard-preview.png" alt="Servisan Web Dashboard Preview" width="760" />
+
+<br><br>
+
 [Key Features](#-key-features) •
 [Why Servisan?](#-why-servisan-vs-alternatives) •
 [Architecture](#-architecture) •
@@ -37,6 +43,7 @@ The name blends **Server** + Laravel's **Artisan**, while paying homage to the I
 ## ✨ Key Features
 
 * 🚀 **Blazing Fast & Featherweight:** Manager executable starts in under 100ms with a baseline memory footprint of **< 15 MB RAM**.
+* 🖥️ **Laragon-Style Web Dashboard:** Clean, intuitive browser dashboard with real-time PHP & MySQL status monitors, in-browser log console (50-line tail), phpMyAdmin, and direct native OS triggers for Terminal shell and File Explorer.
 * 🛡️ **Zero Zombie Processes:** Controlled via native **Windows Job Objects** (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`). If Servisan exits, stops, or crashes, child PHP/MySQL processes are reaped cleanly—no lingering background instances locking ports.
 * 📦 **100% Portable & Isolated:** Data (`data/`), logs (`logs/`), configurations (`config/`), and projects (`www/`) live strictly inside the Servisan folder. Put it on a USB drive or move folders freely without reconfiguring.
 * 🎛️ **Silent System Tray (No Window / No Black Console):** Runs unobtrusively in the Windows notification area (near the clock) with dynamic status indicators (🟢 running / ⚪ stopped). Never clutters your taskbar with open windows or black terminal popups.
