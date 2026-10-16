@@ -15,6 +15,7 @@
 # User projects
 /www/*
 !/www/.gitkeep
+!/www/index.php
 
 # Generated runtime config
 /config/generated/

@@ -316,6 +316,13 @@ impl App {
                 })?;
             }
         }
+
+        let index_file = web_root.join("index.php");
+        if !index_file.is_file() {
+            let default_index = include_str!("../www/index.php");
+            let _ = std::fs::write(&index_file, default_index);
+        }
+
         Ok(())
     }
 
