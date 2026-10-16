@@ -196,6 +196,19 @@ pub fn phpmyadmin_item() -> MenuItem {
 
 /// Run the tray event loop until the user chooses Exit. Diverges.
 pub fn run(app: App) -> Result<()> {
+    let mutex_name = app.instance_mutex_name();
+    let instance_guard = match crate::platform::SingleInstance::acquire(&mutex_name)? {
+        Some(guard) => guard,
+        None => {
+            // Servisan is already running in another process.
+            // Open the Web Dashboard in the user's browser so they get immediate feedback,
+            // and exit without creating duplicate tray icons.
+            let _ = app.open_dashboard();
+            detach_console();
+            return Ok(());
+        }
+    };
+
     let event_loop = EventLoopBuilder::<()>::with_user_event().build();
 
     let installed = app.phpmyadmin_installed();
@@ -236,6 +249,7 @@ pub fn run(app: App) -> Result<()> {
     detach_console();
 
     event_loop.run(move |event, _window_target, control_flow| {
+        let _keep_guard = &instance_guard;
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
 
         if let Event::NewEvents(_) = event {

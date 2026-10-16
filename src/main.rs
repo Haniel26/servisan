@@ -110,6 +110,16 @@ fn main() -> Result<()> {
 
 /// Start services and block until Ctrl+C, then shut everything down.
 fn run_foreground(app: &App, only: Option<ServiceKind>) -> Result<()> {
+    let mutex_name = app.instance_mutex_name();
+    let _instance = match servisan::platform::SingleInstance::acquire(&mutex_name)? {
+        Some(guard) => guard,
+        None => {
+            eprintln!("Servisan is already running in another process.");
+            eprintln!("Use 'servisan status' or check the system tray.");
+            return Ok(());
+        }
+    };
+
     let mut running = app.start(only)?;
     let shutdown = signal::install_shutdown_flag()?;
 

@@ -371,6 +371,18 @@ impl App {
         format!("http://{}:{}/", browser_host, self.config.php.port)
     }
 
+    /// A unique system mutex name scoped to this Servisan installation root.
+    pub fn instance_mutex_name(&self) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.paths
+            .root()
+            .to_string_lossy()
+            .to_lowercase()
+            .hash(&mut hasher);
+        format!("Local\\Servisan_Instance_{:x}", hasher.finish())
+    }
+
     pub fn open_dashboard(&self) -> Result<()> {
         crate::phpmyadmin::open_url(&self.web_url())
     }

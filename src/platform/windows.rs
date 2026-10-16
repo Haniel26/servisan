@@ -8,13 +8,48 @@
 use std::sync::OnceLock;
 
 use anyhow::Result;
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::core::HSTRING;
+use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
 use windows::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
     SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+use windows::Win32::System::Threading::{
+    CreateMutexW, OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+};
+
+/// RAII wrapper around a Windows named mutex used for single-instance detection.
+pub struct SingleInstance(HANDLE);
+
+unsafe impl Send for SingleInstance {}
+unsafe impl Sync for SingleInstance {}
+
+impl SingleInstance {
+    /// Try to acquire a named mutex.
+    /// Returns `Ok(Some(guard))` if this process is the first/only instance.
+    /// Returns `Ok(None)` if another instance is already running holding this mutex.
+    pub fn acquire(name: &str) -> Result<Option<Self>> {
+        unsafe {
+            let hstring = HSTRING::from(name);
+            let handle = CreateMutexW(None, true, &hstring)?;
+            if GetLastError() == ERROR_ALREADY_EXISTS {
+                let _ = CloseHandle(handle);
+                Ok(None)
+            } else {
+                Ok(Some(Self(handle)))
+            }
+        }
+    }
+}
+
+impl Drop for SingleInstance {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
+}
 
 /// RAII wrapper around a Windows job-object handle.
 pub struct JobHandle(HANDLE);
@@ -110,5 +145,23 @@ mod tests {
         }
         let _ = child.kill();
         assert!(died, "child should be killed when job handle closes");
+    }
+
+    #[test]
+    fn single_instance_blocks_duplicate() {
+        let name = "Local\\Servisan_Test_Mutex_Unique_12345";
+        let first = SingleInstance::acquire(name).expect("acquire first instance");
+        assert!(first.is_some(), "first instance should be acquired");
+
+        let second = SingleInstance::acquire(name).expect("acquire second instance");
+        assert!(second.is_none(), "second instance should be blocked");
+
+        drop(first);
+
+        let third = SingleInstance::acquire(name).expect("acquire third instance after drop");
+        assert!(
+            third.is_some(),
+            "third instance should succeed after first is dropped"
+        );
     }
 }

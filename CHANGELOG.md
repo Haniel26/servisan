@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-10-16
+
+### Fixed
+- **Single-Instance Enforcement & Duplicate Tray Prevention**:
+  - Prevented multiple running instances of `servisan.exe` from spawning duplicate tray icons in the Windows notification area.
+  - Implemented Windows named mutex (`Local\Servisan_Instance_<hash>`) scoped to the installation root in `src/platform/windows.rs`.
+  - When a user opens Servisan while it is already running (e.g. clicking desktop/start shortcuts or re-running the executable), the second instance automatically brings up the Web Dashboard in the default browser and exits cleanly without spawning redundant processes or tray icons.
+
 ## [0.1.4] - 2026-10-16
 
 ### Fixed
