@@ -50,7 +50,16 @@ if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
 }
 
-$setupExe = Join-Path $RepoRoot "target\release\servisan-0.1.0-setup.exe"
+function Get-RepoVersion {
+    $line = Select-String -Path (Join-Path $RepoRoot 'Cargo.toml') -Pattern '^version\s*=' | Select-Object -First 1
+    if (-not $line -or -not ($line.Line -match '"(.*)"')) {
+        throw "Could not discover version from Cargo.toml"
+    }
+    return $Matches[1]
+}
+
+$version = Get-RepoVersion
+$setupExe = Join-Path $RepoRoot "target\release\servisan-${version}-setup.exe"
 if (Test-Path -LiteralPath $setupExe) {
     $size = [math]::Round((Get-Item -LiteralPath $setupExe).Length / 1MB, 2)
     $hash = (Get-FileHash -LiteralPath $setupExe -Algorithm SHA256).Hash

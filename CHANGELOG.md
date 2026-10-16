@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-10-16
+
+### Added
+- **Laragon-Style Web Dashboard (`www/index.php`)**:
+  - Full redesign replicating Laragon's clean desktop aesthetic in the browser.
+  - Live PHP and MySQL/MariaDB service status indicators and ports.
+  - Interactive top-right Menu dropdown with phpinfo, loaded extensions, phpMyAdmin, and documentation.
+  - 4 native bottom docked buttons: Logs console modal (50 lines tail, PHP/MySQL/Servisan tabs), Database (phpMyAdmin new tab), Terminal (launches `servisan shell` in Command Prompt), and Root (opens `www/` in File Explorer).
+  - Clean monochrome developer UI with zero emojis and external footer credit.
+- **System Tray "Open Dashboard" Shortcut**:
+  - Added "Open Dashboard" to system tray menu with helper methods `web_url()` and `open_dashboard()`.
+- **Windows Setup Installer (`servisan-setup.exe`)**:
+  - Added Inno Setup script (`scripts/installer.iss`) and build script (`scripts/build-installer.ps1`).
+  - Solid LZMA2 ultra compression (47.5 MB installer containing full 376 MB portable runtimes).
+  - Zero-UAC installation to `C:\Servisan`, desktop shortcut options, and auto-start on boot task.
+- **CI/CD Workflow Upgrades**:
+  - Automated release workflow in `.github/workflows/release.yml` publishing both portable `.zip` and setup `.exe` installers.
+
 ## [0.1.0] - 2026-10-16
 
 ### Initial Public Release
