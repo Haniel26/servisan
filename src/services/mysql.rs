@@ -52,20 +52,33 @@ impl MysqlService {
 
         let output = if mariadb_install.is_file() {
             let mut cmd = Command::new(&mariadb_install);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
             cmd.arg(format!("--datadir={}", data.display()));
-            cmd.arg(format!("--basedir={}", paths.mysql_dir().display()));
             cmd.current_dir(paths.mysql_dir());
             paths.apply_path_env(&mut cmd);
             cmd.output().context("running mariadb-install-db")?
         } else if mysql_install.is_file() {
             let mut cmd = Command::new(&mysql_install);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
             cmd.arg(format!("--datadir={}", data.display()));
-            cmd.arg(format!("--basedir={}", paths.mysql_dir().display()));
             cmd.current_dir(paths.mysql_dir());
             paths.apply_path_env(&mut cmd);
             cmd.output().context("running mysql_install_db")?
         } else {
             let mut cmd = Command::new(&mysqld);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
             cmd.arg(format!("--defaults-file={}", ini.display()));
             cmd.arg("--initialize-insecure");
             paths.apply_path_env(&mut cmd);

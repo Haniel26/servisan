@@ -6,7 +6,7 @@
 
 **Ultra-lightweight, portable, and blazing-fast local PHP + MySQL server manager for Windows, crafted in Rust.**
 
-[![Release](https://img.shields.io/badge/Release-v0.1.2-blue?logo=github)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.1.3-blue?logo=github)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)](https://github.com/Haniel26/servisan)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

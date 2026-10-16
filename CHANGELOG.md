@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-10-16
+
+### Fixed
+- **MariaDB Portable Initialization (`mariadb-install-db.exe` `--basedir` bug fix)**:
+  - Fixed database initialization failure `(exit code: 7): unknown variable 'basedir=...'` when initializing MariaDB/MySQL on non-standard drives or clean portable paths.
+  - Windows `mariadb-install-db.exe` automatically resolves `basedir` relative to its binary folder (`bin\..`) and rejects `--basedir` as an unrecognized option.
+  - Added hidden window creation flag (`CREATE_NO_WINDOW`) to database initialization processes to prevent console flashing during initial startup.
+
 ## [0.1.2] - 2026-10-16
 
 ### Fixed
