@@ -8,6 +8,8 @@ web_root = "www"
 host = "127.0.0.1"
 # Open the browser automatically when services start.
 auto_open_browser = true
+# Restart all services automatically when Servisan starts.
+auto_start_all = true
 
 [php]
 # Informational build name (source of the binaries in bin/php).

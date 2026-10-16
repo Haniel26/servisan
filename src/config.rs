@@ -34,6 +34,9 @@ pub struct General {
     /// Open the browser after services start (StartAll / `servisan start`).
     #[serde(default = "default_auto_open_browser")]
     pub auto_open_browser: bool,
+    /// Restart all services automatically when Servisan starts.
+    #[serde(default = "default_auto_start_all")]
+    pub auto_start_all: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,12 +87,17 @@ fn default_auto_open_browser() -> bool {
     true
 }
 
+fn default_auto_start_all() -> bool {
+    true
+}
+
 impl Default for General {
     fn default() -> Self {
         Self {
             web_root: "www".to_string(),
             host: "127.0.0.1".to_string(),
             auto_open_browser: true,
+            auto_start_all: true,
         }
     }
 }

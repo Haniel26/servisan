@@ -223,12 +223,32 @@ pub fn run(app: App) -> Result<()> {
         .with_menu_on_left_click(true)
         .build()?;
 
-    // The tray icon is registered, so there is no more console output to give.
-    // Drop our console now: any error above still got a chance to print.
-    detach_console();
-
     let mut running: Option<Running> = None;
     let mut last_active: Option<bool> = None;
+
+    if app.config.general.auto_start_all {
+        match app.start(None) {
+            Ok(r) => running = Some(r),
+            Err(e) => report_error(&app, &format!("failed to start services: {e}")),
+        }
+    }
+
+    let active = running.as_mut().map(Running::any_alive).unwrap_or(false);
+    if last_active != Some(active) {
+        last_active = Some(active);
+        let _ = tray.set_icon(Some(status_icon(active).unwrap_or_else(|_| {
+            status_icon(false).expect("fallback icon")
+        })));
+        let _ = tray.set_tooltip(Some(if active {
+            "Servisan - running"
+        } else {
+            "Servisan - stopped"
+        }));
+        start.set_enabled(!active);
+        stop.set_enabled(active);
+    }
+
+    detach_console();
 
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
