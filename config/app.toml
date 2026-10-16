@@ -18,6 +18,8 @@ version = "php-8.3.30-Win32-vs16-x64"
 engine = "builtin"
 # HTTP port. 8080 avoids clashing with Laragon/Apache on port 80.
 port = 8080
+# Number of worker processes for concurrent requests (default 4).
+workers = 4
 
 [mysql]
 # Informational build name (source of the binaries in bin/mysql).

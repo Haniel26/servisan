@@ -38,8 +38,20 @@ pub fn is_installed(paths: &Paths) -> bool {
 
 pub fn configured_source(cfg: &Config) -> PathBuf {
     let source = cfg.phpmyadmin.source.trim();
+    if !source.is_empty() && Path::new(source).is_dir() {
+        return PathBuf::from(source);
+    }
+    for candidate in [
+        r"C:\laragon\etc\apps\phpmyadmin",
+        r"D:\laragon\etc\apps\phpmyadmin",
+    ] {
+        let p = Path::new(candidate);
+        if p.is_dir() {
+            return p.to_path_buf();
+        }
+    }
     if source.is_empty() {
-        PathBuf::from("D:\\laragon\\etc\\apps\\phpmyadmin")
+        PathBuf::from(r"C:\laragon\etc\apps\phpmyadmin")
     } else {
         PathBuf::from(source)
     }

@@ -108,6 +108,10 @@ pub fn render_php_ini(paths: &Paths, _cfg: &Config) -> String {
 
     if Path::new(&opcache).is_file() {
         out.push_str(&format!("zend_extension=\"{opcache}\"\n"));
+        out.push_str("opcache.enable=1\n");
+        out.push_str("opcache.enable_cli=1\n");
+        out.push_str("opcache.validate_timestamps=1\n");
+        out.push_str("opcache.revalidate_freq=0\n");
     }
 
     out

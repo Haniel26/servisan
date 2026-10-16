@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 description = "Lightweight, portable local PHP + MySQL server manager for Windows"
 license = "MIT"
+repository = "https://github.com/Haniel26/servisan"
+homepage = "https://github.com/Haniel26/servisan"
 
 [lib]
 name = "servisan"

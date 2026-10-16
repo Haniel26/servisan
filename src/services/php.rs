@@ -38,6 +38,9 @@ impl HttpEngine for BuiltinServer {
         }
         cmd.arg("-S").arg(addr);
         cmd.arg("-t").arg(root);
+        if cfg.php.workers > 1 {
+            cmd.env("PHP_CLI_SERVER_WORKERS", cfg.php.workers.to_string());
+        }
         paths.apply_path_env(&mut cmd);
         cmd
     }
@@ -122,6 +125,13 @@ mod tests {
         assert!(args.contains(&"-S".to_string()));
         assert!(args.contains(&"127.0.0.1:8080".to_string()));
         assert!(args.contains(&"-t".to_string()));
+
+        let workers_env = cmd
+            .get_envs()
+            .find(|(key, _)| *key == std::ffi::OsStr::new("PHP_CLI_SERVER_WORKERS"))
+            .and_then(|(_, val)| val)
+            .map(|val| val.to_string_lossy().into_owned());
+        assert_eq!(workers_env, Some("4".to_string()));
     }
 
     #[test]

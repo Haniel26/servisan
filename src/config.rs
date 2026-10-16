@@ -48,6 +48,9 @@ pub struct Php {
     pub engine: EngineKind,
     /// HTTP port (default 8080 to avoid clashing with Laragon's port 80).
     pub port: u16,
+    /// Number of concurrent workers for PHP built-in server (PHP_CLI_SERVER_WORKERS).
+    #[serde(default = "default_php_workers")]
+    pub workers: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +94,10 @@ fn default_auto_start_all() -> bool {
     true
 }
 
+fn default_php_workers() -> u32 {
+    4
+}
+
 impl Default for General {
     fn default() -> Self {
         Self {
@@ -108,6 +115,7 @@ impl Default for Php {
             version: "php-8.3.30-Win32-vs16-x64".to_string(),
             engine: EngineKind::default(),
             port: 8080,
+            workers: default_php_workers(),
         }
     }
 }
@@ -154,6 +162,9 @@ impl Config {
         if self.mysql.port == 0 {
             anyhow::bail!("mysql.port must not be 0");
         }
+        if self.php.workers == 0 {
+            anyhow::bail!("php.workers must be at least 1");
+        }
         if self.php.port == self.mysql.port {
             anyhow::bail!(
                 "php.port and mysql.port must differ (both are {})",
@@ -177,6 +188,7 @@ mod tests {
         cfg.validate().unwrap();
         assert_eq!(cfg.php.port, 8080);
         assert_eq!(cfg.mysql.port, 3307);
+        assert_eq!(cfg.php.workers, 4);
         assert_eq!(cfg.php.engine, EngineKind::Builtin);
     }
 

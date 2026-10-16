@@ -73,3 +73,10 @@ Product binary entry points:
 ## Release Repository Policy
 
 Keep repository source-focused. Do not commit runtime binaries, generated MySQL data, logs, user projects, or extracted phpMyAdmin files. Release artifacts belong in GitHub Releases.
+
+## Recent Updates
+
+- **Changelog Standardization & Version Tagging**: Restructured `CHANGELOG.md` following the Keep a Changelog standard for initial public release `[0.1.0]`. Added release badge and navigation link to `README.md`.
+- **Standalone Runtime Auto-Download & Dual-Mode Installer**: Upgraded `scripts/install-binaries.ps1` to support both Laragon binary reuse (auto-detecting `C:\laragon` and `D:\laragon`) and automatic fallback to downloading official portable runtimes (PHP 8.3 Thread-Safe from windows.php.net and MariaDB 11.4 LTS portable zip from official archives). Updated `src/phpmyadmin.rs` to automatically discover Laragon across multiple drive letters. Clarified standalone 100% dependency-free portable package flow in `README.md`.
+- **PHP Concurrency & OPcache Optimization**: Added configurable `workers` option to `[php]` section in `config/app.toml` (defaulting to 4). Propagated `PHP_CLI_SERVER_WORKERS` into `BuiltinServer` spawner to allow concurrent static asset/AJAX handling on Windows. Enabled OPcache in generated `php.ini` (`opcache.enable=1`, `opcache.enable_cli=1`, `opcache.validate_timestamps=1`, `opcache.revalidate_freq=0`) for instant execution without sacrificing real-time code reload.
+- **Documentation & Showcase Preparation (README.md)**: Revamped `README.md` with official brand logo, badges, value proposition, competitive comparison table (Servisan vs Laragon vs XAMPP vs Docker), architecture Mermaid diagram, detailed CLI reference, configuration guide, explicit clarification of silent system tray behavior (no window/no console popup), and future roadmap for GitHub publication (including Laragon database migration tooling).
