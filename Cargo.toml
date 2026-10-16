@@ -33,6 +33,9 @@ windows = { version = "0.58", features = [
     "Win32_Security_Cryptography",
 ] }
 
+[build-dependencies]
+winres = "0.1"
+
 [profile.release]
 opt-level = "z"
 lto = true
