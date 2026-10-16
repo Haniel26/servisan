@@ -110,8 +110,9 @@ pub fn render_php_ini(paths: &Paths, _cfg: &Config) -> String {
     }
 
     if Path::new(&opcache).is_file() {
-        let cache_dir = forward(&paths.data_dir().join("opcache"));
-        let _ = std::fs::create_dir_all(paths.data_dir().join("opcache"));
+        let opcache_dir = paths.tmp_dir().join("opcache");
+        let cache_dir = forward(&opcache_dir);
+        let _ = std::fs::create_dir_all(&opcache_dir);
         out.push_str(&format!("zend_extension=\"{opcache}\"\n"));
         out.push_str("opcache.enable=1\n");
         out.push_str("opcache.enable_cli=1\n");

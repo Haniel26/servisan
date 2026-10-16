@@ -72,9 +72,9 @@ Copy-Tree -Source (Join-Path $RepoRoot 'www') -Destination (Join-Path $Stage 'ww
 # Empty runtime folders. Paired data/logs remain under the portable root.
 New-Item -ItemType Directory -Path (Join-Path $Stage 'data') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $Stage 'logs') -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $Stage 'tmp') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $Stage 'config\generated') -Force | Out-Null
 New-Item -ItemType File -Path (Join-Path $Stage 'www\.gitkeep') -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $Stage 'logs') -Force | Out-Null
 
 if (Test-Path -LiteralPath (Join-Path $RepoRoot 'scripts')) {
     Copy-Tree -Source (Join-Path $RepoRoot 'scripts') -Destination (Join-Path $Stage 'scripts')

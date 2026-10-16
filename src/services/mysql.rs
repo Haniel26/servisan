@@ -39,6 +39,16 @@ impl MysqlService {
 
         let data = paths.data_dir();
         if data.exists() && !Self::is_initialized(paths) {
+            if let Ok(entries) = std::fs::read_dir(&data) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.is_dir() {
+                        let _ = std::fs::remove_dir_all(&p);
+                    } else {
+                        let _ = std::fs::remove_file(&p);
+                    }
+                }
+            }
             let _ = std::fs::remove_dir_all(&data);
         }
         std::fs::create_dir_all(&data).with_context(|| format!("creating {}", data.display()))?;

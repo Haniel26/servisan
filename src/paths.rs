@@ -119,6 +119,10 @@ impl Paths {
         self.root.join("logs")
     }
 
+    pub fn tmp_dir(&self) -> PathBuf {
+        self.root.join("tmp")
+    }
+
     pub fn phpmyadmin_dir(&self) -> PathBuf {
         self.www_dir().join("phpmyadmin")
     }

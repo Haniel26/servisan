@@ -61,6 +61,7 @@ impl App {
             self.paths.data_dir(),
             self.paths.logs_dir(),
             self.paths.config_dir(),
+            self.paths.tmp_dir(),
         ] {
             std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
         }
