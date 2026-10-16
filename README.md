@@ -203,16 +203,31 @@ source = ""
 
 ## 🗺️ Roadmap
 
-- [x] Phase 1: Core CLI & process management (`init`, `start`, `stop`, `status`, `shell`)
-- [x] Phase 1: Robust process safety via Windows Job Object (`KILL_ON_JOB_CLOSE`)
-- [x] Phase 1: Automated phpMyAdmin installer & config generation
-- [x] Phase 2: Lightweight System Tray integration (`tray-icon` + `tao`) with dynamic status icons
-- [x] Phase 2: Brand identity (app icons, logo branding, and styled home landing)
-- [x] Phase 3: Multi-worker concurrency for PHP built-in server (`PHP_CLI_SERVER_WORKERS`)
-- [ ] Phase 3: Database migration & backup tooling (seamless import from Laragon / `.sql` dumps)
-- [ ] Phase 3: Automatic Virtual Hosts & `.test` local domain mapping
-- [ ] Phase 3: One-click PHP version switcher via tray context menu
-- [ ] Phase 4: Distribution via Scoop (`scoop install servisan`) & Winget
+### Completed (v0.1.x)
+- [x] Core CLI & process management (`init`, `start`, `stop`, `status`, `shell`)
+- [x] Robust Windows process safety via Job Objects (`KILL_ON_JOB_CLOSE`)
+- [x] Single-Instance enforcement with Windows named mutex (no duplicate tray icons)
+- [x] Dual-distribution packaging (portable `.zip` & Inno Setup `.exe`) with app-local VC++ runtimes
+- [x] Laragon-style desktop-window Web Dashboard (`www/index.php`) with docked action buttons
+- [x] Automatic GitHub update detection & interactive 1-click download modal
+- [x] Multi-worker concurrency for PHP built-in server (`PHP_CLI_SERVER_WORKERS`)
+- [x] App-local OPcache optimization with Windows ASLR crash resiliency
+
+### Phase 1: Independent Toolchain & Distribution (v0.2.0)
+- [ ] Bundled Composer (`composer.phar` / `composer.bat`) on PATH for out-of-the-box Laravel tooling
+- [ ] Official phpMyAdmin auto-download & ultra-lightweight Adminer (~500KB) support (100% decoupling from Laragon)
+- [ ] Official Winget package submission (`winget install Haniel26.Servisan`) & Scoop manifest
+
+### Phase 2: Automatic Virtual Hosts & Local Domains (v0.3.0) — *The Killer Feature*
+- [ ] Built-in lightweight Rust reverse proxy routing port 80 to project public roots (e.g. `www/blog/public`)
+- [ ] Automatic Windows `hosts` file synchronization (`*.test` domains resolved without manual configuration)
+- [ ] Zero Apache/Nginx dependency to preserve the ultra-lightweight memory footprint
+
+### Phase 3: Laravel Developer Experience & Scaffolding (v0.4.0)
+- [ ] One-command project creation: `servisan new <app>` (runs `composer create-project`, configures database, and registers `<app>.test`)
+- [ ] Background worker controls from tray context menu (`php artisan queue:work` & schedule runner)
+- [ ] Database migration & backup tooling (1-click import from Laragon / `.sql` dumps)
+- [ ] One-click PHP version switcher via tray menu
 
 ---
 
