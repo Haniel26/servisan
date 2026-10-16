@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.5] - 2026-10-16
 
+### Added
+- **Automatic Update Detection & Interactive Release Modal**:
+  - Automatic background detection of new GitHub releases whenever the Web Dashboard is loaded online.
+  - Interactive pulsating update badge on the navbar when a newer version is available.
+  - "Check for Updates..." menu item in the dashboard dropdown with instant manual checks.
+  - Interactive Update Modal displaying version comparison, release changelog notes, direct 1-click downloads for Windows Installer (`.exe`) and Portable Archive (`.zip`), and direct GitHub release links.
+
 ### Fixed
 - **Single-Instance Enforcement & Duplicate Tray Prevention**:
   - Prevented multiple running instances of `servisan.exe` from spawning duplicate tray icons in the Windows notification area.
