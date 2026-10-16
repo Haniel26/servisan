@@ -121,7 +121,8 @@ pub fn write_all(paths: &Paths, cfg: &Config) -> Result<()> {
         .context("writing generated my.ini")?;
     std::fs::write(php_ini_path(paths), render_php_ini(paths, cfg))
         .context("writing generated php.ini")?;
-    std::fs::write(init_sql_path(paths), render_init_sql()).context("writing generated init.sql")?;
+    std::fs::write(init_sql_path(paths), render_init_sql())
+        .context("writing generated init.sql")?;
     Ok(())
 }
 

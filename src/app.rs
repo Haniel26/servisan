@@ -32,7 +32,11 @@ pub struct Running {
 impl Running {
     /// True while at least one managed service is still alive.
     pub fn any_alive(&mut self) -> bool {
-        let php = self.php.as_mut().map(PhpService::is_running).unwrap_or(false);
+        let php = self
+            .php
+            .as_mut()
+            .map(PhpService::is_running)
+            .unwrap_or(false);
         let mysql = self
             .mysql
             .as_mut()
@@ -58,8 +62,7 @@ impl App {
             self.paths.logs_dir(),
             self.paths.config_dir(),
         ] {
-            std::fs::create_dir_all(&dir)
-                .with_context(|| format!("creating {}", dir.display()))?;
+            std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
         }
         Ok(())
     }
@@ -77,7 +80,10 @@ impl App {
 
         crate::ini::write_all(&self.paths, &self.config)?;
         MysqlService::ensure_initialized(&self.paths, &self.config)?;
-        println!("initialized MySQL data directory at {}", self.paths.data_dir().display());
+        println!(
+            "initialized MySQL data directory at {}",
+            self.paths.data_dir().display()
+        );
         println!("done.");
         Ok(())
     }
@@ -115,7 +121,10 @@ impl App {
             let mut mysql = MysqlService::start(&self.paths, &self.config)?;
             if !mysql.wait_ready(Duration::from_secs(30)) {
                 let _ = mysql.stop(&self.paths, &self.config);
-                bail!("MySQL did not become ready (see {})", mysql.log_path().display());
+                bail!(
+                    "MySQL did not become ready (see {})",
+                    mysql.log_path().display()
+                );
             }
             println!(
                 "MySQL   pid {} -> mysql://127.0.0.1:{}",
@@ -230,10 +239,15 @@ impl App {
         );
         println!(
             "  phpMyAdmin: {} {}",
-            if self.phpmyadmin_installed() { "installed" } else { "not installed" },
+            if self.phpmyadmin_installed() {
+                "installed"
+            } else {
+                "not installed"
+            },
             self.phpmyadmin_url().as_deref().unwrap_or(""),
         );
-        println!("  MySQL data: {}",
+        println!(
+            "  MySQL data: {}",
             if MysqlService::is_initialized(&self.paths) {
                 "initialized"
             } else {
@@ -329,7 +343,10 @@ impl App {
         if self.config.phpmyadmin.enabled {
             self.ensure_phpmyadmin_configured()?;
         }
-        println!("phpMyAdmin installed at {}", self.phpmyadmin_dir().display());
+        println!(
+            "phpMyAdmin installed at {}",
+            self.phpmyadmin_dir().display()
+        );
         if let Some(url) = self.phpmyadmin_url() {
             println!("phpMyAdmin URL: {url}");
         }

@@ -28,10 +28,7 @@ pub fn phpmyadmin_dir(paths: &Paths) -> PathBuf {
 }
 
 pub fn is_installed(paths: &Paths) -> bool {
-    paths
-        .phpmyadmin_dir()
-        .join("index.php")
-        .is_file()
+    paths.phpmyadmin_dir().join("index.php").is_file()
         && paths
             .phpmyadmin_dir()
             .join("libraries")
@@ -70,8 +67,7 @@ pub fn ensure_secret(paths: &Paths) -> Result<String> {
     let secret = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     }
     fs::write(&path, format!("{secret}\n"))
         .with_context(|| format!("writing phpMyAdmin secret {}", path.display()))?;
@@ -184,7 +180,9 @@ fn is_empty_dir(path: &Path) -> bool {
 fn copy_dir_recursive(from: &Path, to: &Path) -> Result<()> {
     for entry in fs::read_dir(from).with_context(|| format!("reading {}", from.display()))? {
         let entry = entry.with_context(|| format!("reading {}", from.display()))?;
-        let file_type = entry.file_type().with_context(|| format!("stat {}", entry.path().display()))?;
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("stat {}", entry.path().display()))?;
         let destination = to.join(entry.file_name());
 
         if file_type.is_dir() {
@@ -196,7 +194,11 @@ fn copy_dir_recursive(from: &Path, to: &Path) -> Result<()> {
                 fs::create_dir_all(parent)?;
             }
             fs::copy(entry.path(), &destination).with_context(|| {
-                format!("copying {} to {}", entry.path().display(), destination.display())
+                format!(
+                    "copying {} to {}",
+                    entry.path().display(),
+                    destination.display()
+                )
             })?;
         }
     }

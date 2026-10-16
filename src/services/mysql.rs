@@ -186,7 +186,9 @@ mod tests {
     #[test]
     #[ignore = "slow: initializes a real MySQL datadir and starts the server"]
     fn initialize_start_and_stop() {
-        let _guard = crate::HEAVY_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::HEAVY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let (base, mut cfg) = match service_paths() {
             Some(v) => v,
             None => {
@@ -204,7 +206,10 @@ mod tests {
         assert!(MysqlService::is_initialized(&paths));
 
         let mut svc = MysqlService::start(&paths, &cfg).unwrap();
-        assert!(svc.wait_ready(Duration::from_secs(30)), "mysqld did not become ready");
+        assert!(
+            svc.wait_ready(Duration::from_secs(30)),
+            "mysqld did not become ready"
+        );
 
         svc.stop(&paths, &cfg).unwrap();
         assert!(!svc.is_running(), "mysqld should have stopped");

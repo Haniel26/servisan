@@ -58,8 +58,7 @@ fn status_icon(running: bool) -> Result<Icon> {
         include_bytes!("../assets/tray-stopped.rgba")
     };
 
-    Icon::from_rgba(rgba.to_vec(), SIZE, SIZE)
-        .map_err(|e| anyhow!("building tray icon: {e}"))
+    Icon::from_rgba(rgba.to_vec(), SIZE, SIZE).map_err(|e| anyhow!("building tray icon: {e}"))
 }
 
 /// Open a file or folder in the shell's default handler.
@@ -175,12 +174,7 @@ pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
     ])?;
 
     if installed {
-        let phpmyadmin = MenuItem::with_id(
-            ID_PMA,
-            "Open phpMyAdmin",
-            true,
-            None,
-        );
+        let phpmyadmin = MenuItem::with_id(ID_PMA, "Open phpMyAdmin", true, None);
         menu.append_items(&[&PredefinedMenuItem::separator(), &phpmyadmin])?;
     }
 
@@ -218,9 +212,9 @@ pub fn run(app: App) -> Result<()> {
     let active = running.as_mut().map(Running::any_alive).unwrap_or(false);
     if last_active != Some(active) {
         last_active = Some(active);
-        let _ = tray.set_icon(Some(status_icon(active).unwrap_or_else(|_| {
-            status_icon(false).expect("fallback icon")
-        })));
+        let _ = tray.set_icon(Some(
+            status_icon(active).unwrap_or_else(|_| status_icon(false).expect("fallback icon")),
+        ));
         let _ = tray.set_tooltip(Some(if active {
             "Servisan - running"
         } else {
@@ -257,9 +251,10 @@ pub fn run(app: App) -> Result<()> {
             let active = running.as_mut().map(Running::any_alive).unwrap_or(false);
             if last_active != Some(active) {
                 last_active = Some(active);
-                let _ = tray.set_icon(Some(status_icon(active).unwrap_or_else(|_| {
-                    status_icon(false).expect("fallback icon")
-                })));
+                let _ = tray.set_icon(Some(
+                    status_icon(active)
+                        .unwrap_or_else(|_| status_icon(false).expect("fallback icon")),
+                ));
                 let _ = tray.set_tooltip(Some(if active {
                     "Servisan - running"
                 } else {
@@ -333,7 +328,9 @@ mod tests {
     #[test]
     #[ignore = "starts real PHP + MySQL services on the configured ports"]
     fn start_and_stop_cycle() {
-        let _guard = crate::HEAVY_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::HEAVY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let app = match App::load() {
             Ok(a) => a,
             Err(_) => return,
@@ -348,12 +345,18 @@ mod tests {
             apply_action(&app, &mut running, Action::StartAll),
             Outcome::Continue
         );
-        assert!(running.is_some(), "services should be running after StartAll");
+        assert!(
+            running.is_some(),
+            "services should be running after StartAll"
+        );
 
         assert_eq!(
             apply_action(&app, &mut running, Action::StopAll),
             Outcome::Continue
         );
-        assert!(running.is_none(), "services should be cleared after StopAll");
+        assert!(
+            running.is_none(),
+            "services should be cleared after StopAll"
+        );
     }
 }

@@ -181,7 +181,10 @@ mod tests {
             p.mysqld_exe(),
             PathBuf::from(r"D:\ServiSan\bin\mysql\bin\mysqld.exe")
         );
-        assert_eq!(p.config_file(), PathBuf::from(r"D:\ServiSan\config\app.toml"));
+        assert_eq!(
+            p.config_file(),
+            PathBuf::from(r"D:\ServiSan\config\app.toml")
+        );
     }
 
     #[test]
