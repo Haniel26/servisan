@@ -80,6 +80,21 @@ if (Test-Path -LiteralPath (Join-Path $RepoRoot 'scripts')) {
     Copy-Tree -Source (Join-Path $RepoRoot 'scripts') -Destination (Join-Path $Stage 'scripts')
 }
 
+# Bundle Microsoft Visual C++ runtime DLLs (vcruntime140, msvcp140) app-locally so target machines do not require VC++ Redistributable.
+Write-Host "Bundling Visual C++ runtime DLLs (App-Local)..." -ForegroundColor Cyan
+$vcDlls = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcomp140.dll')
+$sys32 = "$env:SystemRoot\System32"
+foreach ($dir in @($Stage, (Join-Path $Stage 'bin\php'), (Join-Path $Stage 'bin\mysql\bin'))) {
+    if (Test-Path -LiteralPath $dir) {
+        foreach ($dll in $vcDlls) {
+            $src = Join-Path $sys32 $dll
+            if (Test-Path -LiteralPath $src) {
+                Copy-Item -LiteralPath $src -Destination (Join-Path $dir $dll) -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 # Cache-free release package: remove unused repository metadata.
 Get-ChildItem -LiteralPath $Stage -Recurse -Filter '*.pdb' -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue

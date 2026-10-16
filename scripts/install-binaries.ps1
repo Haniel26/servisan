@@ -184,6 +184,21 @@ if ($useLaragon) {
     }
 }
 
+# Bundle Microsoft Visual C++ runtime DLLs (vcruntime140, msvcp140) app-locally
+Write-Host "Ensuring Visual C++ runtime DLLs (vcruntime140 / msvcp140) are bundled..." -ForegroundColor Cyan
+$vcDlls = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcomp140.dll')
+$sys32 = "$env:SystemRoot\System32"
+foreach ($dir in @($PhpDst, (Join-Path $MysqlDst 'bin'))) {
+    if (Test-Path -LiteralPath $dir) {
+        foreach ($dll in $vcDlls) {
+            $src = Join-Path $sys32 $dll
+            if (Test-Path -LiteralPath $src) {
+                Copy-Item -LiteralPath $src -Destination (Join-Path $dir $dll) -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 Write-Host ''
 Write-Host "=== Setup Complete! ===" -ForegroundColor Green
 Write-Host "PHP   installed to: $PhpDst"

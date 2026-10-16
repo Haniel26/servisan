@@ -2,7 +2,7 @@
 ; Builds a Windows installer for Servisan
 
 #define MyAppName "Servisan"
-#define MyAppVersion "0.1.1"
+#define MyAppVersion "0.1.2"
 #define MyAppPublisher "Haniel26"
 #define MyAppURL "https://github.com/Haniel26/servisan"
 #define MyAppExeName "servisan.exe"
