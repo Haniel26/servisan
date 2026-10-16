@@ -31,6 +31,9 @@ pub struct General {
     pub web_root: String,
     /// Host interface the HTTP server binds to.
     pub host: String,
+    /// Open the browser after services start (StartAll / `servisan start`).
+    #[serde(default = "default_auto_open_browser")]
+    pub auto_open_browser: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,11 +80,16 @@ fn default_phpmyadmin_source() -> String {
     "D:\\laragon\\etc\\apps\\phpmyadmin".to_string()
 }
 
+fn default_auto_open_browser() -> bool {
+    true
+}
+
 impl Default for General {
     fn default() -> Self {
         Self {
             web_root: "www".to_string(),
             host: "127.0.0.1".to_string(),
+            auto_open_browser: true,
         }
     }
 }

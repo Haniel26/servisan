@@ -136,6 +136,29 @@ impl App {
             running.php = Some(php);
         }
 
+        if want_php && self.config.general.auto_open_browser {
+            let raw_host = self.config.general.host.as_str();
+            let browser_host = if raw_host == "0.0.0.0" {
+                "127.0.0.1"
+            } else {
+                raw_host
+            };
+            let url = format!("http://{}:{}/", browser_host, self.config.php.port);
+
+            // Keep the worker ready before launching the browser.
+            std::thread::sleep(Duration::from_millis(500));
+            let ready_deadline = std::time::Instant::now() + Duration::from_secs(3);
+            while std::time::Instant::now() < ready_deadline {
+                if port_open(browser_host, self.config.php.port) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            if let Err(e) = crate::phpmyadmin::open_url(&url) {
+                eprintln!("warning: could not open browser: {e}");
+            }
+        }
+
         Ok(running)
     }
 
