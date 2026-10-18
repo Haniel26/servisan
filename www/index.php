@@ -8,21 +8,29 @@ if (isset($_GET['phpinfo'])) {
     exit;
 }
 
-$mysqlHost = '127.0.0.1';
-$mysqlPort = 3307;
+// The Rust manager injects these so the dashboard reflects app.toml
+// and Cargo.toml instead of keeping a second copy of the values.
+$mysqlHost = getenv('SERVISAN_MYSQL_HOST') ?: '127.0.0.1';
+$mysqlPort = (int) (getenv('SERVISAN_MYSQL_PORT') ?: 3307);
 $mysqlUser = 'root';
 $mysqlPass = '';
+$servisanVersion = getenv('SERVISAN_VERSION') ?: 'dev';
 
 function check_mysql(string $host, int $port, string $user, string $pass): array
 {
     if (class_exists('mysqli')) {
-        $conn = @new mysqli($host, $user, $pass, null, $port);
-        if ($conn->connect_errno) {
-            return [false, 'mysqli: ' . $conn->connect_error];
+        // PHP 8.1+ throws on connection failure instead of setting connect_errno.
+        try {
+            $conn = @new mysqli($host, $user, $pass, null, $port);
+            if ($conn->connect_errno) {
+                return [false, 'mysqli: ' . $conn->connect_error];
+            }
+            $version = (string) $conn->server_info;
+            $conn->close();
+            return [true, $version];
+        } catch (Throwable $e) {
+            return [false, 'mysqli: ' . $e->getMessage()];
         }
-        $version = (string) $conn->server_info;
-        $conn->close();
-        return [true, $version];
     }
 
     if (class_exists('PDO') && in_array('mysql', PDO::getAvailableDrivers(), true)) {
@@ -172,6 +180,12 @@ sort($extensions);
         flex-direction: column;
         min-height: 100vh;
         user-select: none;
+    }
+
+    /* Log output and modal text are meant to be read and copied. */
+    #logConsole,
+    .modal-body {
+        user-select: text;
     }
 
     /* Main Area & Footer */
@@ -638,7 +652,7 @@ sort($extensions);
                     <a class="dropdown-item" href="https://github.com/Haniel26/servisan" target="_blank">GitHub Repository</a>
                 </div>
             </div>
-            <span class="badge-version" id="versionBadge" onclick="checkUpdateManual()" style="cursor:pointer;" title="Servisan v0.1.5 - Click to check for updates">v0.1.5</span>
+            <span class="badge-version" id="versionBadge" onclick="checkUpdateManual()" style="cursor:pointer;" title="Servisan v<?= htmlspecialchars($servisanVersion) ?> - Click to check for updates">v<?= htmlspecialchars($servisanVersion) ?></span>
             <a href="https://github.com/Haniel26/servisan" target="_blank" class="icon-link" title="GitHub Repository">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                     <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
@@ -859,7 +873,7 @@ sort($extensions);
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 600;">Current Version</div>
-                    <div style="font-size: 15px; font-weight: 700; color: #334155;">v0.1.5</div>
+                    <div style="font-size: 15px; font-weight: 700; color: #334155;">v<?= htmlspecialchars($servisanVersion) ?></div>
                 </div>
                 <div style="color: #94a3b8; font-size: 20px;">→</div>
                 <div>
@@ -1023,7 +1037,7 @@ sort($extensions);
     }
 
     // Update Checker (Option B)
-    const CURRENT_VERSION = '0.1.5';
+    const CURRENT_VERSION = <?= json_encode($servisanVersion, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     let cachedRelease = null;
 
     function compareSemver(a, b) {
@@ -1039,6 +1053,12 @@ sort($extensions);
     }
 
     function checkForUpdates(isManual) {
+        if (CURRENT_VERSION === 'dev') {
+            if (isManual) {
+                showToast('Versi development: pengecekan update dilewati.');
+            }
+            return;
+        }
         if (isManual) {
             showToast('Memeriksa pembaruan di GitHub...');
         }

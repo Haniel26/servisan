@@ -41,6 +41,11 @@ impl HttpEngine for BuiltinServer {
         if cfg.php.workers > 1 {
             cmd.env("PHP_CLI_SERVER_WORKERS", cfg.php.workers.to_string());
         }
+        // The dashboard reads these through getenv() so app.toml (MySQL port)
+        // and Cargo.toml (version) stay the source of truth.
+        cmd.env("SERVISAN_MYSQL_HOST", "127.0.0.1");
+        cmd.env("SERVISAN_MYSQL_PORT", cfg.mysql.port.to_string());
+        cmd.env("SERVISAN_VERSION", crate::VERSION);
         paths.apply_path_env(&mut cmd);
         cmd
     }
@@ -112,6 +117,13 @@ mod tests {
         cfg
     }
 
+    fn command_env(cmd: &std::process::Command, name: &str) -> Option<String> {
+        cmd.get_envs()
+            .find(|(key, _)| *key == std::ffi::OsStr::new(name))
+            .and_then(|(_, value)| value)
+            .map(|value| value.to_string_lossy().into_owned())
+    }
+
     #[test]
     fn builtin_command_uses_php_and_port() {
         let paths = Paths::new(r"D:\ServiSan");
@@ -126,12 +138,56 @@ mod tests {
         assert!(args.contains(&"127.0.0.1:8080".to_string()));
         assert!(args.contains(&"-t".to_string()));
 
-        let workers_env = cmd
-            .get_envs()
-            .find(|(key, _)| *key == std::ffi::OsStr::new("PHP_CLI_SERVER_WORKERS"))
-            .and_then(|(_, val)| val)
-            .map(|val| val.to_string_lossy().into_owned());
-        assert_eq!(workers_env, Some("4".to_string()));
+        assert_eq!(
+            command_env(&cmd, "PHP_CLI_SERVER_WORKERS"),
+            Some("4".to_string())
+        );
+        assert_eq!(
+            command_env(&cmd, "SERVISAN_MYSQL_PORT"),
+            Some("3307".to_string())
+        );
+        assert_eq!(
+            command_env(&cmd, "SERVISAN_MYSQL_HOST"),
+            Some("127.0.0.1".to_string())
+        );
+        assert_eq!(
+            command_env(&cmd, "SERVISAN_VERSION"),
+            Some(crate::VERSION.to_string())
+        );
+    }
+
+    #[test]
+    fn dashboard_env_tracks_configured_mysql_port() {
+        let paths = Paths::new(r"D:\ServiSan");
+        let mut cfg = cfg_for(Path::new("www"), 8080);
+        cfg.mysql.port = 3310;
+        let cmd = BuiltinServer.command(&paths, &cfg);
+
+        assert_eq!(
+            command_env(&cmd, "SERVISAN_MYSQL_PORT"),
+            Some("3310".to_string())
+        );
+    }
+
+    #[test]
+    fn dashboard_renders_when_mysql_is_offline() {
+        let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("dashboard_offline.php");
+        let output = match std::process::Command::new("php").arg(&script).output() {
+            Ok(output) => output,
+            Err(_) => {
+                eprintln!("skipping: php not installed");
+                return;
+            }
+        };
+
+        assert!(
+            output.status.success(),
+            "dashboard regression test failed:\n{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]

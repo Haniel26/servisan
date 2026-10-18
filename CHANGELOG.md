@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Dashboard now shows MySQL as stopped instead of throwing a fatal exception when the database is offline.
+- Dashboard now reads the configured MySQL port and app version from the manager instead of hardcoded values.
+- Log output and modal text can be selected and copied again.
+
 ## [0.1.5] - 2026-10-16
 
 ### Added
