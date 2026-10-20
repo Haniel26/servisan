@@ -49,6 +49,7 @@ The name blends **Server** + Laravel's **Artisan**, while paying homage to the I
 * 🎛️ **Silent System Tray (No Window / No Black Console):** Runs unobtrusively in the Windows notification area (near the clock) with dynamic status indicators (🟢 running / ⚪ stopped). Never clutters your taskbar with open windows or black terminal popups.
 * 🔀 **Conflict-Free Ports by Default:** Defaults to PHP **8080** and MySQL **3307** so you can run Servisan side-by-side with Laragon, Docker, or IIS without port clashes.
 * 💻 **Built-in Developer Shell:** `servisan shell` immediately launches your terminal with Servisan's portable `php`, `mysql`, and `mysqladmin` injected directly into `PATH`.
+* 🔄 **Automated Database Migration (Zero-Touch Autopilot):** Seamlessly scan and migrate all your databases from Laragon, XAMPP, or WAMP into Servisan with 1-click. Even if Laragon/XAMPP is stopped or broken, Servisan automatically spawns an ephemeral background MySQL instance on a temporary port without requiring passwords or touching the source server!
 * 🗄️ **phpMyAdmin Ready:** One command (`servisan phpmyadmin install`) imports and configures a managed phpMyAdmin dashboard with automated blowfish secret generation.
 
 ---
@@ -61,6 +62,7 @@ The name blends **Server** + Laravel's **Artisan**, while paying homage to the I
 | **Startup Latency** | **Instant (< 100ms)** | Moderate (~2-4s) | Slow | Very Slow (~15-30s) |
 | **Orphan Process Cleanup** | **Windows Job Object (Guaranteed)** | Sometimes leaks | Frequently leaks | Container daemon |
 | **Portability** | **100% Isolated / Zero Registry** | Semi-portable | Hardcoded paths | Host dependencies |
+| **Migration from Other Servers** | **Automated Zero-Touch Autopilot** | Manual SQL dump/import | Manual SQL dump/import | Complex volume mapping |
 | **Installation Overhead** | **Zero (Unzip & Run)** | Installer required | Installer required | Heavy setup |
 | **Modern Open Source** | **Rust (MIT)** | Closed-source Pascal | C / Apache (Legacy) | Proprietary Client |
 
@@ -206,7 +208,7 @@ source = ""
 
 ## 🗺️ Roadmap
 
-### Completed (v0.1.x)
+### Completed (v0.1.x & v0.2.0)
 - [x] Core CLI & process management (`init`, `start`, `stop`, `status`, `shell`)
 - [x] Robust Windows process safety via Job Objects (`KILL_ON_JOB_CLOSE`)
 - [x] Single-Instance enforcement with Windows named mutex (no duplicate tray icons)
@@ -215,21 +217,27 @@ source = ""
 - [x] Automatic GitHub update detection & interactive 1-click download modal
 - [x] Multi-worker concurrency for PHP built-in server (`PHP_CLI_SERVER_WORKERS`)
 - [x] App-local OPcache optimization with Windows ASLR crash resiliency
+- [x] **Automated Database Migration Engine (`servisan migrate`)**:
+  - [x] Auto-detection of local servers across all Windows drive letters (Laragon, XAMPP, WAMP, custom)
+  - [x] Zero-Touch Autopilot: Headless temporary `mysqld` background spawner for offline/stopped servers
+  - [x] Custom folder source picker (`--from <path>`) for external drives or moved installations
+  - [x] Interactive Database Migration Wizard in Web Dashboard with real-time console & storage sizing
+  - [x] Strict Zero-Emoji UI & unified 15x15 monochrome developer SVG icons
+  - [x] Dynamic environment variables injection (`SERVISAN_MYSQL_PORT`, `SERVISAN_VERSION`) & PHP 8.1+ exception safety
 
-### Phase 1: Independent Toolchain & Distribution (v0.2.0)
+### Phase 2: Independent Toolchain & Distribution (v0.3.0)
 - [ ] Bundled Composer (`composer.phar` / `composer.bat`) on PATH for out-of-the-box Laravel tooling
 - [ ] Official phpMyAdmin auto-download & ultra-lightweight Adminer (~500KB) support (100% decoupling from Laragon)
 - [ ] Official Winget package submission (`winget install Haniel26.Servisan`) & Scoop manifest
 
-### Phase 2: Automatic Virtual Hosts & Local Domains (v0.3.0) — *The Killer Feature*
+### Phase 3: Automatic Virtual Hosts & Local Domains (v0.4.0) — *The Killer Feature*
 - [ ] Built-in lightweight Rust reverse proxy routing port 80 to project public roots (e.g. `www/blog/public`)
 - [ ] Automatic Windows `hosts` file synchronization (`*.test` domains resolved without manual configuration)
 - [ ] Zero Apache/Nginx dependency to preserve the ultra-lightweight memory footprint
 
-### Phase 3: Laravel Developer Experience & Scaffolding (v0.4.0)
+### Phase 4: Laravel Developer Experience & Scaffolding (v0.5.0)
 - [ ] One-command project creation: `servisan new <app>` (runs `composer create-project`, configures database, and registers `<app>.test`)
 - [ ] Background worker controls from tray context menu (`php artisan queue:work` & schedule runner)
-- [ ] Database migration & backup tooling (1-click import from Laragon / `.sql` dumps)
 - [ ] One-click PHP version switcher via tray menu
 
 ---
