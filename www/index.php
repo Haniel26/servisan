@@ -14,7 +14,7 @@ $mysqlHost = getenv('SERVISAN_MYSQL_HOST') ?: '127.0.0.1';
 $mysqlPort = (int) (getenv('SERVISAN_MYSQL_PORT') ?: 3307);
 $mysqlUser = 'root';
 $mysqlPass = '';
-$servisanVersion = getenv('SERVISAN_VERSION') ?: 'dev';
+$servisanVersion = getenv('SERVISAN_VERSION') ?: '0.2.0';
 
 function check_mysql(string $host, int $port, string $user, string $pass): array
 {
