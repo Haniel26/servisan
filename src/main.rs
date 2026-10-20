@@ -47,6 +47,12 @@ enum Command {
         #[command(subcommand)]
         command: PhpMyAdminCommand,
     },
+    /// Migrate databases from Laragon, XAMPP, WAMP, or other MySQL installations.
+    #[command(name = "migrate")]
+    Migrate {
+        #[command(subcommand)]
+        command: MigrateCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -64,6 +70,59 @@ enum PhpMyAdminCommand {
     Status,
     /// Open phpMyAdmin in the browser.
     Open,
+}
+
+#[derive(Subcommand)]
+enum MigrateCommand {
+    /// Scan for local server installations (Laragon, XAMPP, WAMP) or a specific directory.
+    Scan {
+        /// Specific folder to scan (skip auto-detection).
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Source MySQL port (only used with --from for a custom source).
+        #[arg(long, default_value = "3306")]
+        port: u16,
+
+        /// Output scan results in JSON format.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List databases found in detected installations or a specific directory.
+    List {
+        /// Specific folder to list databases from (skip auto-detection).
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Source MySQL port (only used with --from for a custom source).
+        #[arg(long, default_value = "3306")]
+        port: u16,
+
+        /// Output discovered databases in JSON format.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import databases from detected installations into Servisan's MySQL.
+    Import {
+        /// Specific database names to import. Imports all if omitted.
+        databases: Vec<String>,
+
+        /// Import from a specific data directory path (skip auto-detection).
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Source MySQL port (only used with --from for a custom source).
+        #[arg(long, default_value = "3306")]
+        port: u16,
+
+        /// Skip databases that already exist in Servisan (default behavior).
+        #[arg(long)]
+        skip_existing: bool,
+
+        /// Overwrite databases that already exist in Servisan.
+        #[arg(long)]
+        overwrite: bool,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -104,7 +163,137 @@ fn main() -> Result<()> {
             }
             PhpMyAdminCommand::Open => app.open_phpmyadmin(),
         },
+        Some(Command::Migrate { command }) => run_migrate(&app, command),
         Some(Command::Start { only }) => run_foreground(&app, only.map(ServiceKind::from)),
+    }
+}
+
+/// Handle `servisan migrate` subcommands.
+fn run_migrate(app: &App, command: MigrateCommand) -> Result<()> {
+    use servisan::migrate::detect;
+    use servisan::migrate::discover;
+    use servisan::migrate::import::{ConflictStrategy, ImportOptions};
+
+    match command {
+        MigrateCommand::Scan { from, port, json } => {
+            let sources = if let Some(from_path) = from {
+                vec![detect::custom_source(PathBuf::from(from_path), port)]
+            } else {
+                detect::scan_sources()?
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&sources)?);
+                return Ok(());
+            }
+            if sources.is_empty() {
+                println!("No local server installations found.");
+                println!("Looked for Laragon, XAMPP, and WAMP on all available drives.");
+            } else {
+                println!("Found {} local server installation(s):\n", sources.len());
+                for (i, src) in sources.iter().enumerate() {
+                    println!("  [{}] {}", i + 1, src);
+                    println!("      Data: {}", src.data_dir.display());
+                    if let Some(ref dump) = src.mysqldump_exe {
+                        println!("      Dump: {}", dump.display());
+                    }
+                    println!();
+                }
+            }
+            Ok(())
+        }
+
+        MigrateCommand::List { from, port, json } => {
+            let sources = if let Some(from_path) = from {
+                vec![detect::custom_source(PathBuf::from(from_path), port)]
+            } else {
+                detect::scan_sources()?
+            };
+
+            if json {
+                #[derive(serde::Serialize)]
+                struct SourceEntry {
+                    source: String,
+                    root: String,
+                    port: u16,
+                    is_running: bool,
+                    databases: Vec<discover::DiscoveredDatabase>,
+                }
+                let mut output = Vec::new();
+                for src in &sources {
+                    let dbs = discover::discover_databases(src)?;
+                    output.push(SourceEntry {
+                        source: src.kind.to_string(),
+                        root: src.root.display().to_string(),
+                        port: src.mysql_port,
+                        is_running: src.is_running,
+                        databases: dbs,
+                    });
+                }
+                println!("{}", serde_json::to_string_pretty(&output)?);
+                return Ok(());
+            }
+            if sources.is_empty() {
+                println!("No local server installations found.");
+                return Ok(());
+            }
+
+            for src in &sources {
+                println!("{} ({}):", src.kind, src.root.display());
+                let dbs = discover::discover_databases(src)?;
+                if dbs.is_empty() {
+                    println!("  (no user databases found)\n");
+                } else {
+                    for db in &dbs {
+                        println!("  {:<28} {:>10}", db.name, db.size_display());
+                    }
+                    println!();
+                }
+            }
+            Ok(())
+        }
+
+        MigrateCommand::Import {
+            databases,
+            from,
+            port,
+            skip_existing: _,
+            overwrite,
+        } => {
+            let conflict = if overwrite {
+                ConflictStrategy::Overwrite
+            } else {
+                ConflictStrategy::Skip
+            };
+
+            let opts = ImportOptions {
+                filter: databases,
+                on_conflict: conflict,
+            };
+
+            if let Some(from_path) = from {
+                // Custom source from a specific path.
+                let source = detect::custom_source(PathBuf::from(from_path), port);
+                servisan::migrate::import::run_import(&app.paths, &app.config, &source, &opts)?;
+            } else {
+                // Auto-detect all sources and import from each.
+                let sources = detect::scan_sources()?;
+                if sources.is_empty() {
+                    println!("No local server installations found.");
+                    println!(
+                        "Use --from <path> --port <port> to specify a custom MySQL data directory."
+                    );
+                    return Ok(());
+                }
+
+                for source in &sources {
+                    servisan::migrate::import::run_import(&app.paths, &app.config, source, &opts)?;
+                    println!();
+                }
+            }
+
+            Ok(())
+        }
     }
 }
 

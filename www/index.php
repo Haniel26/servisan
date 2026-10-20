@@ -66,27 +66,83 @@ if (isset($_GET['action']) && $_GET['action'] === 'open_root') {
     exit;
 }
 
+function get_servisan_cmd(string $docRoot): string {
+    $rootDir = dirname($docRoot);
+    $candidates = [
+        $rootDir . DIRECTORY_SEPARATOR . 'servisan.exe',
+        $rootDir . DIRECTORY_SEPARATOR . 'target' . DIRECTORY_SEPARATOR . 'release' . DIRECTORY_SEPARATOR . 'servisan.exe',
+        $rootDir . DIRECTORY_SEPARATOR . 'target' . DIRECTORY_SEPARATOR . 'debug' . DIRECTORY_SEPARATOR . 'servisan.exe',
+    ];
+    foreach ($candidates as $candidate) {
+        if (file_exists($candidate)) {
+            return '"' . $candidate . '"';
+        }
+    }
+    return 'servisan';
+}
+
 // Handle open_terminal action (open Command Prompt with servisan shell)
 if (isset($_GET['action']) && $_GET['action'] === 'open_terminal') {
     if (PHP_OS_FAMILY === 'Windows') {
         $rootDir = dirname($docRoot);
-        $candidates = [
-            $rootDir . DIRECTORY_SEPARATOR . 'servisan.exe',
-            $rootDir . DIRECTORY_SEPARATOR . 'target' . DIRECTORY_SEPARATOR . 'release' . DIRECTORY_SEPARATOR . 'servisan.exe',
-            $rootDir . DIRECTORY_SEPARATOR . 'target' . DIRECTORY_SEPARATOR . 'debug' . DIRECTORY_SEPARATOR . 'servisan.exe',
-        ];
-        $exe = 'servisan';
-        foreach ($candidates as $candidate) {
-            if (file_exists($candidate)) {
-                $exe = '"' . $candidate . '"';
-                break;
-            }
-        }
+        $exe = get_servisan_cmd($docRoot);
         $cmd = 'start "Servisan Shell" cmd.exe /k "cd /d "' . $rootDir . '" && ' . $exe . ' shell"';
         pclose(popen($cmd, 'r'));
     }
     header('Content-Type: application/json');
     echo json_encode(['ok' => true]);
+    exit;
+}
+
+// Handle migrate_scan action (scan for local server databases via servisan migrate list --json)
+if (isset($_GET['action']) && $_GET['action'] === 'migrate_scan') {
+    $exe = get_servisan_cmd($docRoot);
+    $from = trim($_GET['from'] ?? '');
+    $fromArg = $from !== '' ? ' --from ' . escapeshellarg($from) : '';
+    $output = @shell_exec($exe . ' migrate list' . $fromArg . ' --json 2>&1');
+    $sources = json_decode($output ?? '', true);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'ok' => is_array($sources),
+        'sources' => $sources ?? [],
+        'servisan_mysql_ok' => $mysqlOk,
+        'from' => $from,
+        'raw' => $output,
+    ]);
+    exit;
+}
+
+// Handle migrate_import action (import selected databases into Servisan MySQL)
+if (isset($_GET['action']) && $_GET['action'] === 'migrate_import') {
+    $exe = get_servisan_cmd($docRoot);
+    $dbs = $_POST['databases'] ?? [];
+    if (is_string($dbs)) {
+        $dbs = array_filter(array_map('trim', explode(',', $dbs)));
+    }
+    $overwrite = !empty($_POST['overwrite']) && $_POST['overwrite'] !== 'false' && $_POST['overwrite'] !== '0';
+    $from = trim($_POST['from'] ?? '');
+
+    $args = '';
+    if ($from !== '') {
+        $args .= ' --from ' . escapeshellarg($from);
+    }
+    if (!empty($dbs) && is_array($dbs)) {
+        foreach ($dbs as $db) {
+            $args .= ' ' . escapeshellarg($db);
+        }
+    }
+    if ($overwrite) {
+        $args .= ' --overwrite';
+    }
+
+    $cmd = $exe . ' migrate import' . $args . ' 2>&1';
+    $output = @shell_exec($cmd);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'ok' => true,
+        'cmd' => $cmd,
+        'output' => $output ?? '',
+    ]);
     exit;
 }
 
@@ -270,11 +326,16 @@ sort($extensions);
         left: auto;
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        width: 210px;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        min-width: 220px;
         z-index: 100;
         padding: 6px 0;
+        animation: menuFadeIn 0.15s ease-out;
+    }
+    @keyframes menuFadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
     }
     .dropdown-menu.show {
         display: block;
@@ -282,21 +343,47 @@ sort($extensions);
     .dropdown-item {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
+        gap: 10px;
+        padding: 8px 14px;
         font-size: 13px;
-        color: #4a5568;
+        color: #334155;
         text-decoration: none;
         cursor: pointer;
+        transition: all 0.15s ease;
     }
     .dropdown-item:hover {
-        background: #f7fafc;
-        color: #2b6cb0;
+        background: #f8fafc;
+        color: #0284c7;
+    }
+    .dropdown-item:hover .menu-icon {
+        color: #0284c7;
+    }
+    .menu-icon {
+        width: 15px;
+        height: 15px;
+        color: #64748b;
+        flex-shrink: 0;
+        transition: color 0.15s ease;
+    }
+    .menu-badge {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+        background: #f1f5f9;
+        padding: 1px 7px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+    }
+    .dropdown-item:hover .menu-badge {
+        background: #e0f2fe;
+        color: #0369a1;
+        border-color: #bae6fd;
     }
     .dropdown-divider {
         height: 1px;
-        background: #edf2f7;
-        margin: 4px 0;
+        background: #f1f5f9;
+        margin: 5px 0;
     }
 
     .top-right {
@@ -604,6 +691,9 @@ sort($extensions);
         from { bottom: 24px; opacity: 1; }
         to { bottom: 10px; opacity: 0; }
     }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
 </style>
 </head>
 <body>
@@ -622,20 +712,81 @@ sort($extensions);
                 <div class="menu-btn" onclick="toggleMenu(event)">Menu ▾</div>
                 
                 <div class="dropdown-menu" id="dropdownMenu">
-                    <a class="dropdown-item" href="?phpinfo=1" target="_blank">PHP Info (phpinfo)</a>
-                    <a class="dropdown-item" href="javascript:showExtensions()">Loaded Extensions (<?= count($extensions) ?>)</a>
+                    <a class="dropdown-item" href="?phpinfo=1" target="_blank">
+                        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <line x1="10" y1="9" x2="8" y2="9"></line>
+                        </svg>
+                        <span>PHP Info (phpinfo)</span>
+                    </a>
+                    <a class="dropdown-item" href="javascript:showExtensions()">
+                        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                        </svg>
+                        <span>Loaded Extensions</span>
+                        <span class="menu-badge"><?= count($extensions) ?></span>
+                    </a>
+
                     <div class="dropdown-divider"></div>
+
+                    <a class="dropdown-item" href="javascript:openMigrateModal()">
+                        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                            <path d="M12 12l4 4m0 0l-4 4m4-4H8"></path>
+                        </svg>
+                        <span>Database Migration</span>
+                    </a>
                     <?php if ($pmaInstalled): ?>
-                        <a class="dropdown-item" href="/phpmyadmin/" target="_blank">Open phpMyAdmin</a>
+                        <a class="dropdown-item" href="/phpmyadmin/" target="_blank">
+                            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                            </svg>
+                            <span>Open phpMyAdmin</span>
+                        </a>
                     <?php endif; ?>
-                    <a class="dropdown-item" href="javascript:openTerminal()">Terminal Shell</a>
-                    <a class="dropdown-item" href="javascript:openLogs()">Server Logs</a>
+                    <a class="dropdown-item" href="javascript:openTerminal()">
+                        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 17 10 11 4 5"></polyline>
+                            <line x1="12" y1="19" x2="20" y2="19"></line>
+                        </svg>
+                        <span>Terminal Shell</span>
+                    </a>
+                    <a class="dropdown-item" href="javascript:openLogs()">
+                        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                        <span>Server Logs</span>
+                    </a>
+
+                    <div class="dropdown-divider"></div>
+
                     <a class="dropdown-item" id="menuCheckUpdates" href="javascript:checkUpdateManual()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#0284c7;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
                         <span>Check for Updates...</span>
                     </a>
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="https://github.com/Haniel26/servisan" target="_blank">GitHub Repository</a>
+                    <a class="dropdown-item" href="https://github.com/Haniel26/servisan" target="_blank">
+                        <svg class="menu-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
+                        </svg>
+                        <span>GitHub Repository</span>
+                    </a>
                 </div>
             </div>
             <span class="badge-version" id="versionBadge" onclick="checkUpdateManual()" style="cursor:pointer;" title="Servisan v0.1.5 - Click to check for updates">v0.1.5</span>
@@ -906,6 +1057,81 @@ sort($extensions);
     </div>
 </div>
 
+<!-- Database Migration Modal -->
+<div class="modal-backdrop" id="migrateModal" onclick="closeModal(event, 'migrateModal')">
+    <div class="modal-box" style="width: 660px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background: #e0f2fe; display: flex; align-items: center; justify-content: center; color: #0284c7;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="modal-title" style="margin: 0;">Database Migration</h3>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Impor database MySQL dari Laragon, XAMPP, atau WAMP ke Servisan</div>
+                </div>
+            </div>
+            <button type="button" id="btnMigrateHeaderClose" onclick="closeMigrateModal()" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;color:#64748b;">✕</button>
+        </div>
+
+        <div class="modal-body" style="padding: 0; overflow-y: auto; flex: 1;" id="migrateModalBody">
+            <div id="migrateLoading" style="text-align: center; padding: 32px 16px; color: #64748b; font-size: 13px;">
+                <div style="display: inline-block; width: 24px; height: 24px; border: 2px solid #cbd5e1; border-top-color: #0284c7; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 8px;"></div>
+                <div>Memindai instalasi Laragon, XAMPP, dan WAMP...</div>
+            </div>
+
+            <div id="migrateContent" style="display: none;">
+                <!-- Manual folder selection bar -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px;">
+                    <div style="font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0284c7;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            <span>Pilih Folder Manual / Custom Source:</span>
+                        </span>
+                        <a href="javascript:resetToAutoScan()" id="btnResetAutoScan" style="font-size: 11.5px; color: #0284c7; text-decoration: none; display: none;">← Kembali ke Auto-Detect</a>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <input type="text" id="migrateCustomPath" placeholder="Contoh: D:\laragon atau D:\laragon\data\mysql atau E:\xampp" style="flex: 1; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; font-family: Consolas, monospace;">
+                        <button type="button" onclick="scanCustomFolder()" style="background: #0284c7; color: #ffffff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;">Pindai Folder</button>
+                    </div>
+                </div>
+
+                <div id="migrateSources"></div>
+
+                <div style="margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+                    <label style="font-size: 12px; color: #475569; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="migrateOverwrite">
+                        <span>Overwrite jika database sudah ada di Servisan</span>
+                    </label>
+                    <span id="migrateSelectedCount" style="font-size: 12px; color: #64748b; font-weight: 500;">0 database dipilih</span>
+                </div>
+            </div>
+
+            <!-- Console view during and after migration -->
+            <div id="migrateConsoleBox" style="display: none;">
+                <div style="font-size: 12.5px; font-weight: 600; color: #334155; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <span id="migrateConsoleStatus">Proses Impor Berjalan...</span>
+                </div>
+                <div id="migrateConsole" style="background: #0f172a; color: #38bdf8; padding: 14px 16px; border-radius: 6px; font-family: Consolas, 'Courier New', monospace; font-size: 12px; line-height: 1.5; height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;"></div>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 12px;">
+            <div>
+                <button type="button" id="btnMigrateRescan" onclick="loadMigrateScan()" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:6px 14px;border-radius:6px;font-size:12.5px;cursor:pointer;color:#334155;">Rescan</button>
+                <button type="button" id="btnMigrateBack" onclick="backToMigrationList()" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:6px 14px;border-radius:6px;font-size:12.5px;cursor:pointer;color:#334155;display:none;">← Kembali ke Daftar Database</button>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button type="button" id="btnMigrateClose" class="btn-modal-close" style="margin-top:0;" onclick="closeMigrateModal()">Close</button>
+                <button type="button" id="btnStartMigrate" onclick="startMigration()" style="background:#0284c7;color:#fff;border:none;padding:6px 16px;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;">Start Migration</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast">Copied to clipboard!</div>
 
 <script>
@@ -932,6 +1158,10 @@ sort($extensions);
 
     function closeModal(e, id) {
         if (e.target.id === id) {
+            if (id === 'migrateModal' && typeof isMigrating !== 'undefined' && isMigrating) {
+                showToast('Proses migrasi sedang berlangsung, mohon tunggu...');
+                return;
+            }
             document.getElementById(id).classList.remove('show');
         }
     }
@@ -1138,11 +1368,347 @@ sort($extensions);
         document.getElementById('updateModal').classList.add('show');
     }
 
+    // Database Migration Modal Logic
+    let currentMigrateFrom = '';
+    let migrateScanData = null;
+    let isMigrating = false;
+
+    function openMigrateModal() {
+        document.getElementById('migrateModal').classList.add('show');
+        loadMigrateScan();
+    }
+
+    function closeMigrateModal() {
+        if (isMigrating) {
+            showToast('Proses migrasi sedang berlangsung, mohon tunggu...');
+            return;
+        }
+        document.getElementById('migrateModal').classList.remove('show');
+    }
+
+    function scanCustomFolder() {
+        if (isMigrating) return;
+        const pathInput = document.getElementById('migrateCustomPath');
+        const customPath = (pathInput.value || '').trim();
+        if (!customPath) {
+            showToast('Silakan masukkan path folder.');
+            return;
+        }
+        currentMigrateFrom = customPath;
+        const resetBtn = document.getElementById('btnResetAutoScan');
+        if (resetBtn) resetBtn.style.display = 'inline-block';
+        loadMigrateScan(customPath);
+    }
+
+    function resetToAutoScan() {
+        if (isMigrating) return;
+        currentMigrateFrom = '';
+        const pathInput = document.getElementById('migrateCustomPath');
+        if (pathInput) pathInput.value = '';
+        const resetBtn = document.getElementById('btnResetAutoScan');
+        if (resetBtn) resetBtn.style.display = 'none';
+        loadMigrateScan('');
+    }
+
+    function backToMigrationList() {
+        if (isMigrating) return;
+        const content = document.getElementById('migrateContent');
+        const consoleBox = document.getElementById('migrateConsoleBox');
+        const btnStart = document.getElementById('btnStartMigrate');
+        const btnRescan = document.getElementById('btnMigrateRescan');
+        const btnBack = document.getElementById('btnMigrateBack');
+
+        consoleBox.style.display = 'none';
+        content.style.display = 'block';
+        if (btnBack) btnBack.style.display = 'none';
+        if (btnRescan) btnRescan.style.display = 'inline-block';
+        if (btnStart) btnStart.style.display = 'inline-block';
+        updateSelectedCount();
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return '0 B';
+        const k = 1024;
+        const dm = 1;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function loadMigrateScan(fromPath) {
+        if (isMigrating) return;
+        if (typeof fromPath === 'undefined') {
+            fromPath = currentMigrateFrom;
+        }
+
+        const loading = document.getElementById('migrateLoading');
+        const content = document.getElementById('migrateContent');
+        const consoleBox = document.getElementById('migrateConsoleBox');
+        const btnStart = document.getElementById('btnStartMigrate');
+        const btnRescan = document.getElementById('btnMigrateRescan');
+        const btnBack = document.getElementById('btnMigrateBack');
+        const container = document.getElementById('migrateSources');
+
+        loading.style.display = 'block';
+        content.style.display = 'none';
+        consoleBox.style.display = 'none';
+        if (btnStart) {
+            btnStart.style.display = 'inline-block';
+            btnStart.disabled = true;
+        }
+        if (btnRescan) {
+            btnRescan.style.display = 'inline-block';
+            btnRescan.disabled = false;
+        }
+        if (btnBack) {
+            btnBack.style.display = 'none';
+        }
+        container.innerHTML = '';
+
+        const url = fromPath ? ('?action=migrate_scan&from=' + encodeURIComponent(fromPath)) : '?action=migrate_scan';
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                loading.style.display = 'none';
+                content.style.display = 'block';
+                migrateScanData = data;
+
+                if (!data.ok || !data.sources || data.sources.length === 0) {
+                    container.innerHTML = `
+                        <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:6px;padding:24px;text-align:center;color:#64748b;font-size:13px;">
+                            <div style="font-weight:600;color:#334155;margin-bottom:4px;">Tidak ada server lokal atau database terdeteksi</div>
+                            <div>Servisan telah memindai path instalasi standar Laragon, XAMPP, dan WAMP pada semua drive komputer Anda.</div>
+                            <div style="margin-top:10px;font-size:12px;color:#0284c7;">Gunakan kolom <strong>Pilih Folder Manual</strong> di atas jika instalasi Anda berada di lokasi khusus.</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                let totalDbs = 0;
+
+                data.sources.forEach((src, sIdx) => {
+                    const isRunning = !!src.is_running;
+                    const dbs = src.databases || [];
+                    totalDbs += dbs.length;
+
+                    html += `
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;margin-bottom:12px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <strong style="font-size:14px;color:#0f172a;">${escapeHtml(src.source)}</strong>
+                                    <span style="font-size:12px;color:#64748b;font-family:monospace;">${escapeHtml(src.root)}</span>
+                                </div>
+                                <div>
+                                    ${isRunning 
+                                        ? '<span style="background:#ecfdf5;color:#059669;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">MySQL Running (Port ' + src.port + ')</span>'
+                                        : '<span style="background:#e0f2fe;color:#0284c7;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">Offline (Auto-Start Ready)</span>'
+                                    }
+                                </div>
+                            </div>
+                    `;
+
+                    if (!isRunning) {
+                        html += `
+                            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px 12px;font-size:12px;color:#0369a1;margin-bottom:10px;line-height:1.4;display:flex;align-items:flex-start;gap:8px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;color:#0284c7;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                <div>
+                                    <strong>Zero-Touch Mode:</strong> MySQL ${escapeHtml(src.source)} sedang tidak aktif. Servisan akan otomatis menyalakan instance database di background port darurat secara silent saat migrasi berjalan. Anda tidak perlu menyentuh atau membuka aplikasi ${escapeHtml(src.source)}.
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    if (dbs.length === 0) {
+                        html += '<div style="font-size:12.5px;color:#94a3b8;font-style:italic;">Tidak ada database pengguna ditemukan di instalasi ini.</div>';
+                    } else {
+                        html += `
+                            <div style="border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;background:#ffffff;">
+                                <div style="background:#f1f5f9;padding:6px 10px;display:flex;align-items:center;justify-content:space-between;font-size:11.5px;font-weight:600;color:#475569;border-bottom:1px solid #e2e8f0;">
+                                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                        <input type="checkbox" onchange="toggleSelectAll(${sIdx}, this.checked)" checked>
+                                        <span>Pilih Semua Database</span>
+                                    </label>
+                                    <span>Ukuran Estimasi</span>
+                                </div>
+                                <div style="max-height:160px;overflow-y:auto;">
+                        `;
+
+                        dbs.forEach((db, dbIdx) => {
+                            const sizeStr = formatBytes(db.estimated_size);
+                            html += `
+                                <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #f1f5f9;font-size:12.5px;">
+                                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#334155;">
+                                        <input type="checkbox" class="migrate-db-chk s-${sIdx}" value="${escapeHtml(db.name)}" onchange="updateSelectedCount()" checked>
+                                        <span style="font-weight:500;">${escapeHtml(db.name)}</span>
+                                    </label>
+                                    <span style="color:#64748b;font-size:11.5px;font-family:monospace;">${sizeStr}</span>
+                                </div>
+                            `;
+                        });
+
+                        html += '</div></div>';
+                    }
+
+                    html += '</div>';
+                });
+
+                if (!data.servisan_mysql_ok) {
+                    html += `
+                        <div style="background:#fef2f2;border:1px solid #fee2e2;border-radius:6px;padding:8px 12px;font-size:12px;color:#991b1b;margin-top:10px;display:flex;align-items:center;gap:8px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#dc2626;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <div>
+                                <strong>MySQL Servisan (port 3307) sedang mati.</strong> Pastikan Servisan telah di-Start sebelum menjalankan migrasi.
+                            </div>
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = html;
+                updateSelectedCount();
+            })
+            .catch(err => {
+                loading.style.display = 'none';
+                content.style.display = 'block';
+                container.innerHTML = `<div style="color:#ef4444;font-size:13px;padding:16px;">Gagal memindai server lokal: ${escapeHtml(err.message)}</div>`;
+            });
+    }
+
+    function toggleSelectAll(sIdx, checked) {
+        document.querySelectorAll('.migrate-db-chk.s-' + sIdx).forEach(el => {
+            el.checked = checked;
+        });
+        updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+        const checked = document.querySelectorAll('.migrate-db-chk:checked');
+        const count = checked.length;
+        const countEl = document.getElementById('migrateSelectedCount');
+        if (countEl) {
+            countEl.textContent = count + ' database dipilih';
+        }
+        const btnStart = document.getElementById('btnStartMigrate');
+        if (btnStart) {
+            btnStart.disabled = (count === 0);
+        }
+    }
+
+    function startMigration() {
+        if (isMigrating) return;
+
+        const checked = Array.from(document.querySelectorAll('.migrate-db-chk:checked')).map(el => el.value);
+        if (checked.length === 0) {
+            showToast('Pilih setidaknya 1 database untuk dimigrasi.');
+            return;
+        }
+
+        const overwrite = document.getElementById('migrateOverwrite')?.checked || false;
+
+        const content = document.getElementById('migrateContent');
+        const consoleBox = document.getElementById('migrateConsoleBox');
+        const consoleEl = document.getElementById('migrateConsole');
+        const statusEl = document.getElementById('migrateConsoleStatus');
+        const btnStart = document.getElementById('btnStartMigrate');
+        const btnRescan = document.getElementById('btnMigrateRescan');
+        const btnBack = document.getElementById('btnMigrateBack');
+        const btnClose = document.getElementById('btnMigrateClose');
+        const btnHeaderClose = document.getElementById('btnMigrateHeaderClose');
+
+        isMigrating = true;
+
+        content.style.display = 'none';
+        consoleBox.style.display = 'block';
+        if (btnStart) btnStart.style.display = 'none';
+        if (btnRescan) btnRescan.style.display = 'none';
+        if (btnBack) btnBack.style.display = 'none';
+        if (btnClose) {
+            btnClose.disabled = true;
+            btnClose.style.opacity = '0.5';
+            btnClose.style.cursor = 'not-allowed';
+        }
+        if (btnHeaderClose) {
+            btnHeaderClose.disabled = true;
+            btnHeaderClose.style.opacity = '0.5';
+            btnHeaderClose.style.cursor = 'not-allowed';
+        }
+
+        statusEl.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#0284c7;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:middle;"></span> Sedang mengimpor database...';
+        consoleEl.textContent = 'Memulai migrasi database...\nDatabase yang akan dimigrasikan: ' + checked.join(', ') + '\n';
+        if (currentMigrateFrom) {
+            consoleEl.textContent += 'Sumber Kustom: ' + currentMigrateFrom + '\n';
+        }
+        consoleEl.textContent += '\n';
+
+        const formData = new FormData();
+        checked.forEach(db => formData.append('databases[]', db));
+        if (overwrite) formData.append('overwrite', '1');
+        if (currentMigrateFrom) formData.append('from', currentMigrateFrom);
+
+        const onFinished = () => {
+            isMigrating = false;
+            if (btnClose) {
+                btnClose.disabled = false;
+                btnClose.style.opacity = '1';
+                btnClose.style.cursor = 'pointer';
+            }
+            if (btnHeaderClose) {
+                btnHeaderClose.disabled = false;
+                btnHeaderClose.style.opacity = '1';
+                btnHeaderClose.style.cursor = 'pointer';
+            }
+            if (btnBack) {
+                btnBack.style.display = 'inline-block';
+            }
+            if (btnRescan) {
+                btnRescan.style.display = 'none';
+            }
+        };
+
+        fetch('?action=migrate_import', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(res => res.json())
+        .then(res => {
+            onFinished();
+            if (res.ok) {
+                consoleEl.textContent += res.output || '(Tidak ada output dari proses)';
+                statusEl.textContent = 'Migrasi Selesai';
+                showToast('Proses migrasi database telah selesai!');
+            } else {
+                consoleEl.textContent += '\nError: Gagal menjalankan impor.';
+                statusEl.textContent = 'Migrasi Gagal';
+            }
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        })
+        .catch(err => {
+            onFinished();
+            consoleEl.textContent += '\nError koneksi: ' + err.message;
+            statusEl.textContent = 'Terjadi Kesalahan';
+        });
+    }
+
     // Auto-check silently when dashboard loads
     window.addEventListener('load', () => {
         setTimeout(() => {
             checkForUpdates(false);
         }, 1200);
+
+        if (window.location.search.indexOf('page=migrate') !== -1) {
+            openMigrateModal();
+        }
     });
 </script>
 

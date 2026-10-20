@@ -1,6 +1,7 @@
 pub mod app;
 pub mod config;
 pub mod ini;
+pub mod migrate;
 pub mod paths;
 pub mod phpmyadmin;
 pub mod platform;

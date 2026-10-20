@@ -22,6 +22,7 @@ const ID_WWW: &str = "servisan.www";
 const ID_CONFIG: &str = "servisan.config";
 const ID_LOGS: &str = "servisan.logs";
 const ID_PMA: &str = "servisan.phpmyadmin";
+const ID_MIGRATE: &str = "servisan.migrate";
 const ID_EXIT: &str = "servisan.exit";
 
 /// A user action triggered from the tray menu.
@@ -34,6 +35,7 @@ pub enum Action {
     OpenConfig,
     OpenLogs,
     OpenPhpMyAdmin,
+    MigrateDB,
     Exit,
 }
 
@@ -47,6 +49,7 @@ fn action_for(id: &str) -> Option<Action> {
         ID_CONFIG => Action::OpenConfig,
         ID_LOGS => Action::OpenLogs,
         ID_PMA => Action::OpenPhpMyAdmin,
+        ID_MIGRATE => Action::MigrateDB,
         ID_EXIT => Action::Exit,
         _ => return None,
     })
@@ -121,6 +124,12 @@ pub fn apply_action(app: &App, running: &mut Option<Running>, action: Action) ->
                 report_error(app, &format!("could not open phpMyAdmin: {e}"));
             }
         }
+        Action::MigrateDB => {
+            let url = format!("{}?page=migrate", app.web_url());
+            if let Err(e) = crate::phpmyadmin::open_url(&url) {
+                report_error(app, &format!("could not open migration page: {e}"));
+            }
+        }
         Action::Exit => {
             if let Some(mut r) = running.take() {
                 if let Err(e) = app.stop_running(&mut r) {
@@ -154,11 +163,12 @@ fn detach_console() {}
 ///
 /// `MenuItem::new` mints a counter-based id ("0", "1", ...), which `action_for`
 /// could never match: the menu would open but every item would be dead.
-fn actionable_items() -> [MenuItem; 7] {
+fn actionable_items() -> [MenuItem; 8] {
     [
         MenuItem::with_id(ID_START, "Start All", true, None),
         MenuItem::with_id(ID_STOP, "Stop All", false, None),
         MenuItem::with_id(ID_DASHBOARD, "Open Dashboard", true, None),
+        MenuItem::with_id(ID_MIGRATE, "Migrate Databases...", true, None),
         MenuItem::with_id(ID_WWW, "Open www", true, None),
         MenuItem::with_id(ID_CONFIG, "Open config", true, None),
         MenuItem::with_id(ID_LOGS, "Open logs", true, None),
@@ -168,7 +178,7 @@ fn actionable_items() -> [MenuItem; 7] {
 
 /// Build the context menu with a variable item enabling phpMyAdmin integration.
 pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
-    let [start, stop, dashboard, www, config, logs, exit] = actionable_items();
+    let [start, stop, dashboard, migrate, www, config, logs, exit] = actionable_items();
 
     let menu = Menu::new();
     menu.append_items(&[&start, &stop, &PredefinedMenuItem::separator(), &dashboard])?;
@@ -179,6 +189,7 @@ pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
     }
 
     menu.append_items(&[
+        &migrate,
         &PredefinedMenuItem::separator(),
         &www,
         &config,
