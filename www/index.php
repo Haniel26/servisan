@@ -1589,7 +1589,7 @@ sort($extensions);
                         <div style="background:#fef2f2;border:1px solid #fee2e2;border-radius:6px;padding:8px 12px;font-size:12px;color:#991b1b;margin-top:10px;display:flex;align-items:center;gap:8px;">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#dc2626;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                             <div>
-                                <strong>MySQL Servisan (port 3307) sedang mati.</strong> Pastikan Servisan telah di-Start sebelum menjalankan migrasi.
+                                <strong>MySQL Servisan sedang mati.</strong> Pastikan Servisan telah di-Start sebelum menjalankan migrasi.
                             </div>
                         </div>
                     `;

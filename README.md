@@ -6,7 +6,7 @@
 
 **Ultra-lightweight, portable, and blazing-fast local PHP + MySQL server manager for Windows, crafted in Rust.**
 
-[![Release](https://img.shields.io/badge/Release-v0.1.5-blue?logo=github)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.2.0-blue?logo=github)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)](https://github.com/Haniel26/servisan)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -166,6 +166,9 @@ servisan [COMMAND] [OPTIONS]
 | `status` | Display running status, active ports, and datadir health |
 | `init` | Initialize directories, `config/app.toml`, `php.ini`, `my.ini`, and MySQL datadir |
 | `shell [--program cmd\|powershell]` | Launch terminal with Servisan's `php`, `mysql`, and `mysqladmin` on `PATH` |
+| `migrate scan [--from <path>]` | Auto-detect local Laragon/XAMPP/WAMP servers or scan custom folder |
+| `migrate list [--from <path>]` | Inspect discovered databases and estimated storage footprints |
+| `migrate import [DATABASES...]` | Import databases with zero-touch autopilot or overwrite options |
 | `phpmyadmin install [--force]` | Import and configure phpMyAdmin from local Laragon directory |
 | `phpmyadmin open` | Launch phpMyAdmin directly in your default browser |
 | `phpmyadmin status` | Check phpMyAdmin installation status and access URL |

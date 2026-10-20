@@ -5,12 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-20
+
+### Added
+- **Automated Database Migration Engine (`servisan migrate`)**:
+  - Automatically scans Windows drive letters (`C:`, `D:`, etc.) detecting existing Laragon, XAMPP, and WAMP installations.
+  - Resolves server binary (`mysqld.exe` / `mariadbd.exe`), dump tool (`mysqldump.exe`), and client (`mysql.exe`).
+  - Offline filesystem inspection of user databases with formatted storage footprint estimates.
+  - Piped zero-loss database streaming and import into Servisan MySQL with conflict options (`Skip` or `Overwrite`).
+  - **Zero-Touch Autopilot Headless Spawner**: If source local server is stopped/offline, Servisan automatically spawns the source's `mysqld` on an ephemeral background port with `--skip-grant-tables --bind-address=127.0.0.1`, streams data silently, and cleans up the process upon completion without requiring user to start or touch Laragon/XAMPP.
+  - **Custom Folder Scanner (`--from <path>`)**: Allows users to point to external hard drives or moved local server installations.
+  - Added CLI subcommands `servisan migrate scan`, `servisan migrate list`, and `servisan migrate import [DATABASES...]` with `--json` support.
+- **Interactive Database Migration Wizard in Web Dashboard**:
+  - Top bar Menu dropdown "Database Migration" shortcut and system tray integration (`/?page=migrate`).
+  - Auto-detected server cards, manual folder path input with live scanning, checklist database selection, and live execution console.
+  - UI state guarding: prevents accidental modal dismissal during migration and replaces controls with a clean return button once finished.
+- **Full SVG Icon Standardization & Strict Zero-Emoji UI**:
+  - Standardized all items in the top-bar dropdown menu with 15x15 monochrome developer SVG icons (`PHP Info`, `Loaded Extensions`, `Database Migration`, `Open phpMyAdmin`, `Terminal Shell`, `Server Logs`, `Check for Updates...`, `GitHub Repository`).
+  - Replaced all unicode emojis across dashboard alerts with clean inline monochrome SVGs.
 
 ### Fixed
-- Dashboard now shows MySQL as stopped instead of throwing a fatal exception when the database is offline.
-- Dashboard now reads the configured MySQL port and app version from the manager instead of hardcoded values.
-- Log output and modal text can be selected and copied again.
+- **PHP 8.1+ MySQL Offline Exception Handling**:
+  - Caught unhandled `mysqli_sql_exception` when MySQL is stopped, ensuring dashboard cleanly renders `stopped` instead of a fatal PHP exception. (Thanks @mteguhfh in #1)
+- **Dynamic Port & Version Manager Injection**:
+  - Replaced hardcoded ports and version numbers with dynamic environment variables (`SERVISAN_MYSQL_PORT`, `SERVISAN_VERSION`) injected directly from `app.toml` and `Cargo.toml`. (Thanks @mteguhfh in #1)
+- **Selectable Log Output**:
+  - Restored text selection on server log console and modal body (`user-select: text`). (Thanks @mteguhfh in #1)
+- **Offline Dashboard Regression Tests**:
+  - Added automated Rust and PHP regression tests (`tests/dashboard_offline.php`) ensuring dashboard renders reliably when database is offline. (Thanks @mteguhfh in #1)
 
 ## [0.1.5] - 2026-10-16
 

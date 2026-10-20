@@ -1,6 +1,6 @@
 [package]
 name = "servisan"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 description = "Lightweight, portable local PHP + MySQL server manager for Windows"
 license = "MIT"
