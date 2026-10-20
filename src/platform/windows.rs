@@ -115,6 +115,32 @@ pub fn assign_to_global_job(pid: u32) -> Result<()> {
     }
 }
 
+/// Open a URL, document, or directory using Windows ShellExecuteW.
+/// This runs independently of cmd.exe, does not inherit stdio handles,
+/// and works safely even after FreeConsole() or in windowless processes.
+pub fn shell_open(target: &str) -> Result<()> {
+    use windows::core::{w, HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    unsafe {
+        let htarget = HSTRING::from(target);
+        let ret = ShellExecuteW(
+            None,
+            w!("open"),
+            PCWSTR(htarget.as_ptr()),
+            None,
+            None,
+            SW_SHOWNORMAL,
+        );
+        let code = ret.0 as isize;
+        if code <= 32 {
+            anyhow::bail!("ShellExecuteW failed for '{target}' with error code {code}");
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

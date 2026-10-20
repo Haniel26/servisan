@@ -171,16 +171,7 @@ pub fn url(cfg: &Config) -> String {
 }
 
 pub fn open_url(url: &str) -> Result<()> {
-    use std::process::Command;
-
-    Command::new("cmd")
-        .arg("/C")
-        .arg("start")
-        .arg("")
-        .arg(url)
-        .spawn()
-        .context("launching browser for phpMyAdmin")?;
-    Ok(())
+    crate::platform::shell_open(url).context("launching browser")
 }
 
 fn is_empty_dir(path: &Path) -> bool {

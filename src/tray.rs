@@ -11,9 +11,16 @@ use anyhow::{anyhow, Result};
 use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon, TrayIconBuilder};
+use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent};
 
 use crate::app::{App, Running};
+
+/// User event bridged to the Tao event loop.
+#[derive(Debug)]
+pub enum TrayUserEvent {
+    TrayIcon(TrayIconEvent),
+    Menu(MenuEvent),
+}
 
 const ID_START: &str = "servisan.start";
 const ID_STOP: &str = "servisan.stop";
@@ -68,8 +75,10 @@ fn status_icon(running: bool) -> Result<Icon> {
 }
 
 /// Open a file or folder in the shell's default handler.
-fn open_path(path: &Path) {
-    let _ = std::process::Command::new("explorer").arg(path).spawn();
+fn open_path(app: &App, path: &Path) {
+    if let Err(e) = crate::platform::shell_open(&path.to_string_lossy()) {
+        report_error(app, &format!("could not open {}: {e:#}", path.display()));
+    }
 }
 
 /// Result of handling a tray action.
@@ -102,38 +111,38 @@ pub fn apply_action(app: &App, running: &mut Option<Running>, action: Action) ->
     match action {
         Action::StartAll => match app.start(None) {
             Ok(r) => *running = Some(r),
-            Err(e) => report_error(app, &format!("failed to start services: {e}")),
+            Err(e) => report_error(app, &format!("failed to start services: {e:#}")),
         },
         Action::StopAll => {
             if let Some(mut r) = running.take() {
                 if let Err(e) = app.stop_running(&mut r) {
-                    report_error(app, &format!("failed to stop services: {e}"));
+                    report_error(app, &format!("failed to stop services: {e:#}"));
                 }
             }
         }
         Action::OpenDashboard => {
             if let Err(e) = app.open_dashboard() {
-                report_error(app, &format!("could not open dashboard: {e}"));
+                report_error(app, &format!("could not open dashboard: {e:#}"));
             }
         }
-        Action::OpenWww => open_path(&app.paths.www_dir()),
-        Action::OpenConfig => open_path(&app.paths.config_file()),
-        Action::OpenLogs => open_path(&app.paths.logs_dir()),
+        Action::OpenWww => open_path(app, &app.paths.www_dir()),
+        Action::OpenConfig => open_path(app, &app.paths.config_file()),
+        Action::OpenLogs => open_path(app, &app.paths.logs_dir()),
         Action::OpenPhpMyAdmin => {
             if let Err(e) = app.open_phpmyadmin() {
-                report_error(app, &format!("could not open phpMyAdmin: {e}"));
+                report_error(app, &format!("could not open phpMyAdmin: {e:#}"));
             }
         }
         Action::MigrateDB => {
             let url = format!("{}?page=migrate", app.web_url());
             if let Err(e) = crate::phpmyadmin::open_url(&url) {
-                report_error(app, &format!("could not open migration page: {e}"));
+                report_error(app, &format!("could not open migration page: {e:#}"));
             }
         }
         Action::Exit => {
             if let Some(mut r) = running.take() {
                 if let Err(e) = app.stop_running(&mut r) {
-                    report_error(app, &format!("failed to stop services on exit: {e}"));
+                    report_error(app, &format!("failed to stop services on exit: {e:#}"));
                 }
             }
             return Outcome::Exit;
@@ -220,7 +229,17 @@ pub fn run(app: App) -> Result<()> {
         }
     };
 
-    let event_loop = EventLoopBuilder::<()>::with_user_event().build();
+    let event_loop = EventLoopBuilder::<TrayUserEvent>::with_user_event().build();
+
+    let proxy = event_loop.create_proxy();
+    TrayIconEvent::set_event_handler(Some(move |event| {
+        let _ = proxy.send_event(TrayUserEvent::TrayIcon(event));
+    }));
+
+    let proxy = event_loop.create_proxy();
+    MenuEvent::set_event_handler(Some(move |event| {
+        let _ = proxy.send_event(TrayUserEvent::Menu(event));
+    }));
 
     let installed = app.phpmyadmin_installed();
     let (menu, start, stop) = build_menu(installed)?;
@@ -238,7 +257,7 @@ pub fn run(app: App) -> Result<()> {
     if app.config.general.auto_start_all {
         match app.start(None) {
             Ok(r) => running = Some(r),
-            Err(e) => report_error(&app, &format!("failed to start services: {e}")),
+            Err(e) => report_error(&app, &format!("failed to start services: {e:#}")),
         }
     }
 
@@ -263,16 +282,14 @@ pub fn run(app: App) -> Result<()> {
         let _keep_guard = &instance_guard;
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
 
-        if let Event::NewEvents(_) = event {
-            while let Ok(menu_event) = MenuEvent::receiver().try_recv() {
-                // An id that maps to nothing means the menu wiring drifted; the
-                // console is gone, so record it where "Open logs" can show it.
+        match event {
+            Event::UserEvent(TrayUserEvent::Menu(menu_event)) => {
                 let Some(action) = action_for(menu_event.id.as_ref()) else {
                     report_error(
                         &app,
                         &format!("unhandled tray menu id {:?}", menu_event.id.as_ref()),
                     );
-                    continue;
+                    return;
                 };
 
                 if apply_action(&app, &mut running, action) == Outcome::Exit {
@@ -280,23 +297,43 @@ pub fn run(app: App) -> Result<()> {
                     return;
                 }
             }
-
-            // Refresh status indicator / menu state on change.
-            let active = running.as_mut().map(Running::any_alive).unwrap_or(false);
-            if last_active != Some(active) {
-                last_active = Some(active);
-                let _ = tray.set_icon(Some(
-                    status_icon(active)
-                        .unwrap_or_else(|_| status_icon(false).expect("fallback icon")),
-                ));
-                let _ = tray.set_tooltip(Some(if active {
-                    "Servisan - running"
-                } else {
-                    "Servisan - stopped"
-                }));
-                start.set_enabled(!active);
-                stop.set_enabled(active);
+            #[cfg(target_os = "windows")]
+            Event::UserEvent(TrayUserEvent::TrayIcon(TrayIconEvent::DoubleClick { .. })) => {
+                let _ = apply_action(&app, &mut running, Action::OpenDashboard);
             }
+            Event::NewEvents(_) => {
+                while let Ok(menu_event) = MenuEvent::receiver().try_recv() {
+                    let Some(action) = action_for(menu_event.id.as_ref()) else {
+                        report_error(
+                            &app,
+                            &format!("unhandled tray menu id {:?}", menu_event.id.as_ref()),
+                        );
+                        continue;
+                    };
+
+                    if apply_action(&app, &mut running, action) == Outcome::Exit {
+                        *control_flow = ControlFlow::ExitWithCode(0);
+                        return;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        // Refresh status indicator / menu state on change.
+        let active = running.as_mut().map(Running::any_alive).unwrap_or(false);
+        if last_active != Some(active) {
+            last_active = Some(active);
+            let _ = tray.set_icon(Some(
+                status_icon(active).unwrap_or_else(|_| status_icon(false).expect("fallback icon")),
+            ));
+            let _ = tray.set_tooltip(Some(if active {
+                "Servisan - running"
+            } else {
+                "Servisan - stopped"
+            }));
+            start.set_enabled(!active);
+            stop.set_enabled(active);
         }
     });
 }
