@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- **CSRF protection for dashboard actions**: the Rust manager injects a random `SERVISAN_DASHBOARD_TOKEN` on every start and the dashboard echoes it in the `X-Servisan-Token` header. Actions without the token are rejected, so other websites can no longer trigger local commands through `127.0.0.1`.
+- **POST-only state changes**: opening the shell, Explorer folders, and database migration now require `POST`; `GET` requests are answered with `405`.
+- **Loopback-only actions and `phpinfo()`**: requests from other machines cannot run dashboard actions, and the page shows a warning banner when it is opened from the network.
+- **Command hardening**: user-supplied folder paths are normalized and validated, database names are checked against an allowlist (blocking CLI-flag injection such as `--overwrite`), and the terminal command is reduced to a single escaped executable call instead of string-concatenated `cmd.exe /k`.
+- **Empty migration selection rejected**: an empty database list can no longer fall through to "import every database".
+- Added `Cache-Control: no-store`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and a restrictive `Content-Security-Policy` to dashboard responses.
+- Added `tests/dashboard_security.php` plus Rust coverage for the token, loopback detection and the action guards.
+
 ## [0.2.0] - 2026-10-20
 
 ### Added

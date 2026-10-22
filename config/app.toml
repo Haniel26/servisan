@@ -4,7 +4,8 @@
 [general]
 # Web root, relative to the Servisan root directory.
 web_root = "www"
-# Interface the HTTP server binds to.
+# Interface the HTTP server binds to. Keep 127.0.0.1 unless you really need
+# LAN access: the dashboard refuses local actions for non-loopback clients.
 host = "127.0.0.1"
 # Open the browser automatically when services start.
 auto_open_browser = true

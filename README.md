@@ -248,6 +248,9 @@ Servisan is strictly designed for **local development environments**:
 * MySQL binds strictly to loopback (`127.0.0.1`).
 * Default user `root` is created with no password for rapid local iteration.
 * Sensitive state, database tables, credentials, and logs are strictly gitignored.
+* Dashboard actions (terminal, logs folder, `www` folder, database migration) only run for requests from this computer and must carry the per-run token injected by the manager. State-changing actions are `POST` only.
+* `phpinfo()` is served only to loopback requests.
+* Keeping `[general] host = "127.0.0.1"` is recommended. If the dashboard is bound to another interface, Servisan prints a warning and the page refuses local actions for network clients.
 
 ---
 

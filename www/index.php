@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-// Handle phpinfo request
-if (isset($_GET['phpinfo'])) {
-    phpinfo();
-    exit;
-}
+// The dashboard can spawn local processes, so keep responses private and
+// stop them from being framed or cached.
+header('Cache-Control: no-store, max-age=0');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('Referrer-Policy: no-referrer');
+header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
 
 // The Rust manager injects these so the dashboard reflects app.toml
 // and Cargo.toml instead of keeping a second copy of the values.
@@ -15,6 +17,107 @@ $mysqlPort = (int) (getenv('SERVISAN_MYSQL_PORT') ?: 3307);
 $mysqlUser = 'root';
 $mysqlPass = '';
 $servisanVersion = getenv('SERVISAN_VERSION') ?: '0.2.0';
+
+// Dashboard actions spawn processes, so they are limited to requests from
+// this computer and must carry the per-run token injected by the manager.
+$remoteAddr = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+if ($remoteAddr === '') {
+    // CLI (tests) has filesystem access already; treat it as local.
+    $remoteAddr = '127.0.0.1';
+}
+$isLoopbackRequest = $remoteAddr === '::1' || preg_match('/^127\./', $remoteAddr) === 1;
+$dashboardToken = (string) (getenv('SERVISAN_DASHBOARD_TOKEN') ?: '');
+$actionsEnabled = $isLoopbackRequest && $dashboardToken !== '';
+
+function respond_json(int $status, array $payload): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json');
+    echo json_encode($payload);
+    exit;
+}
+
+/**
+ * Gate a dashboard action behind loopback access, the manager token and,
+ * for state-changing actions, POST.
+ */
+function require_action_allowed(
+    bool $isLoopback,
+    string $expectedToken,
+    bool $requiresPost,
+    string $action
+): void {
+    if (!$isLoopback) {
+        respond_json(403, [
+            'ok' => false,
+            'error' => 'Dashboard actions are only available from this computer (127.0.0.1 or ::1).',
+        ]);
+    }
+    if ($expectedToken === '') {
+        respond_json(403, [
+            'ok' => false,
+            'error' => 'Dashboard actions need the Servisan manager. Start Servisan and open the dashboard from the tray.',
+        ]);
+    }
+    if ($requiresPost && strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+        respond_json(405, [
+            'ok' => false,
+            'error' => $action . ' must be requested with POST.',
+        ]);
+    }
+    $sent = (string) ($_SERVER['HTTP_X_SERVISAN_TOKEN'] ?? '');
+    if ($sent === '' || !hash_equals($expectedToken, $sent)) {
+        respond_json(403, [
+            'ok' => false,
+            'error' => 'Dashboard token missing or invalid; reload the dashboard and try again.',
+        ]);
+    }
+}
+
+/**
+ * Reject names that would be read as CLI flags. Escaping alone does not help
+ * here because the shell removes the quotes before `servisan` parses argv.
+ * The allowlist also avoids the characters `escapeshellarg()` mangles on
+ * Windows (`"`, `%`, `!`).
+ */
+function valid_database_name(string $name): bool
+{
+    return preg_match('/^[A-Za-z0-9_$][A-Za-z0-9_$ .-]{0,63}$/', $name) === 1;
+}
+
+/**
+ * Trim a pasted folder path and drop trailing separators. A trailing `\`
+ * would escape the closing quote of `escapeshellarg()` on Windows.
+ */
+function normalize_source_path(string $path): string
+{
+    $path = trim($path);
+    if (strlen($path) > 3) {
+        $path = rtrim($path, "\\/");
+    }
+    return $path;
+}
+
+function valid_source_path(string $path): bool
+{
+    return $path !== ''
+        && strlen($path) <= 260
+        && !str_ends_with($path, '\\')
+        && !str_ends_with($path, '/')
+        && preg_match('/^[^\x00-\x1f]+$/', $path) === 1
+        && is_dir($path);
+}
+
+// phpinfo() exposes paths and environment variables, so keep it local.
+if (isset($_GET['phpinfo'])) {
+    if (!$isLoopbackRequest) {
+        http_response_code(403);
+        echo 'phpinfo() is only available from this computer.';
+        exit;
+    }
+    phpinfo();
+    exit;
+}
 
 function check_mysql(string $host, int $port, string $user, string $pass): array
 {
@@ -66,12 +169,11 @@ $docRoot = $_SERVER['DOCUMENT_ROOT'] ?? __DIR__;
 
 // Handle open_root action (open Windows File Explorer directly)
 if (isset($_GET['action']) && $_GET['action'] === 'open_root') {
+    require_action_allowed($isLoopbackRequest, $dashboardToken, true, 'open_root');
     if (PHP_OS_FAMILY === 'Windows') {
-        pclose(popen('explorer ' . escapeshellarg($docRoot), 'r'));
+        pclose(popen('explorer.exe ' . escapeshellarg($docRoot), 'r'));
     }
-    header('Content-Type: application/json');
-    echo json_encode(['ok' => true]);
-    exit;
+    respond_json(200, ['ok' => true]);
 }
 
 function get_servisan_cmd(string $docRoot): string {
@@ -83,61 +185,86 @@ function get_servisan_cmd(string $docRoot): string {
     ];
     foreach ($candidates as $candidate) {
         if (file_exists($candidate)) {
-            return '"' . $candidate . '"';
+            return escapeshellarg($candidate);
         }
     }
     return 'servisan';
 }
 
-// Handle open_terminal action (open Command Prompt with servisan shell)
+// Handle open_terminal action (open a shell window via the servisan CLI)
 if (isset($_GET['action']) && $_GET['action'] === 'open_terminal') {
+    require_action_allowed($isLoopbackRequest, $dashboardToken, true, 'open_terminal');
     if (PHP_OS_FAMILY === 'Windows') {
-        $rootDir = dirname($docRoot);
+        // `servisan shell` sets its own working directory and PATH, so the
+        // command stays a single, fully escaped executable invocation.
         $exe = get_servisan_cmd($docRoot);
-        $cmd = 'start "Servisan Shell" cmd.exe /k "cd /d "' . $rootDir . '" && ' . $exe . ' shell"';
-        pclose(popen($cmd, 'r'));
+        pclose(popen('start "" ' . $exe . ' shell', 'r'));
     }
-    header('Content-Type: application/json');
-    echo json_encode(['ok' => true]);
-    exit;
+    respond_json(200, ['ok' => true]);
 }
 
 // Handle migrate_scan action (scan for local server databases via servisan migrate list --json)
 if (isset($_GET['action']) && $_GET['action'] === 'migrate_scan') {
+    require_action_allowed($isLoopbackRequest, $dashboardToken, false, 'migrate_scan');
+
     $exe = get_servisan_cmd($docRoot);
-    $from = trim($_GET['from'] ?? '');
+    $from = normalize_source_path((string) ($_GET['from'] ?? ''));
+    if ($from !== '' && !valid_source_path($from)) {
+        respond_json(400, ['ok' => false, 'error' => 'Folder sumber tidak ditemukan: ' . $from]);
+    }
     $fromArg = $from !== '' ? ' --from ' . escapeshellarg($from) : '';
     $output = @shell_exec($exe . ' migrate list' . $fromArg . ' --json 2>&1');
     $sources = json_decode($output ?? '', true);
-    header('Content-Type: application/json');
-    echo json_encode([
+    respond_json(200, [
         'ok' => is_array($sources),
         'sources' => $sources ?? [],
         'servisan_mysql_ok' => $mysqlOk,
         'from' => $from,
         'raw' => $output,
     ]);
-    exit;
 }
 
 // Handle migrate_import action (import selected databases into Servisan MySQL)
 if (isset($_GET['action']) && $_GET['action'] === 'migrate_import') {
+    require_action_allowed($isLoopbackRequest, $dashboardToken, true, 'migrate_import');
+
     $exe = get_servisan_cmd($docRoot);
     $dbs = $_POST['databases'] ?? [];
     if (is_string($dbs)) {
         $dbs = array_filter(array_map('trim', explode(',', $dbs)));
     }
+    if (!is_array($dbs)) {
+        respond_json(400, ['ok' => false, 'error' => 'Daftar database tidak valid.']);
+    }
+    foreach ($dbs as $db) {
+        if (!is_string($db)) {
+            respond_json(400, ['ok' => false, 'error' => 'Daftar database tidak valid.']);
+        }
+    }
+    $dbs = array_values(array_unique(array_map(static fn (string $db): string => trim($db), $dbs)));
+    $dbs = array_values(array_filter($dbs, static fn (string $db): bool => $db !== ''));
+    if ($dbs === []) {
+        // An empty filter would make the CLI import every database it finds.
+        respond_json(400, ['ok' => false, 'error' => 'Pilih setidaknya satu database untuk diimpor.']);
+    }
+    foreach ($dbs as $db) {
+        if (!valid_database_name($db)) {
+            respond_json(400, ['ok' => false, 'error' => 'Nama database tidak valid: ' . $db]);
+        }
+    }
+
     $overwrite = !empty($_POST['overwrite']) && $_POST['overwrite'] !== 'false' && $_POST['overwrite'] !== '0';
-    $from = trim($_POST['from'] ?? '');
+    $from = normalize_source_path((string) ($_POST['from'] ?? ''));
+    if ($from !== '' && !valid_source_path($from)) {
+        respond_json(400, ['ok' => false, 'error' => 'Folder sumber tidak ditemukan: ' . $from]);
+    }
 
     $args = '';
     if ($from !== '') {
         $args .= ' --from ' . escapeshellarg($from);
     }
-    if (!empty($dbs) && is_array($dbs)) {
-        foreach ($dbs as $db) {
-            $args .= ' ' . escapeshellarg($db);
-        }
+    foreach ($dbs as $db) {
+        $args .= ' ' . escapeshellarg($db);
     }
     if ($overwrite) {
         $args .= ' --overwrite';
@@ -145,27 +272,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'migrate_import') {
 
     $cmd = $exe . ' migrate import' . $args . ' 2>&1';
     $output = @shell_exec($cmd);
-    header('Content-Type: application/json');
-    echo json_encode([
+    respond_json(200, [
         'ok' => true,
         'cmd' => $cmd,
         'output' => $output ?? '',
     ]);
-    exit;
 }
 
 // Handle open_logs action (open logs folder in Windows File Explorer)
 if (isset($_GET['action']) && $_GET['action'] === 'open_logs') {
+    require_action_allowed($isLoopbackRequest, $dashboardToken, true, 'open_logs');
     if (PHP_OS_FAMILY === 'Windows') {
         $logsDir = dirname($docRoot) . DIRECTORY_SEPARATOR . 'logs';
         if (!is_dir($logsDir)) {
             @mkdir($logsDir, 0777, true);
         }
-        pclose(popen('explorer ' . escapeshellarg($logsDir), 'r'));
+        pclose(popen('explorer.exe ' . escapeshellarg($logsDir), 'r'));
     }
-    header('Content-Type: application/json');
-    echo json_encode(['ok' => true]);
-    exit;
+    respond_json(200, ['ok' => true]);
 }
 
 // Helper to tail the last N lines of a log file
@@ -193,6 +317,8 @@ function tail_file(string $filepath, int $lines = 50): string {
 
 // Handle get_logs action (return last 50 lines in JSON)
 if (isset($_GET['action']) && $_GET['action'] === 'get_logs') {
+    require_action_allowed($isLoopbackRequest, $dashboardToken, false, 'get_logs');
+
     $type = $_GET['type'] ?? 'php';
     $logsDir = dirname($docRoot) . DIRECTORY_SEPARATOR . 'logs';
     $filename = match ($type) {
@@ -201,14 +327,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_logs') {
         default => 'php.log',
     };
     $content = tail_file($logsDir . DIRECTORY_SEPARATOR . $filename, 50);
-    header('Content-Type: application/json');
-    echo json_encode([
+    respond_json(200, [
         'ok' => true,
         'type' => $type,
         'filename' => $filename,
         'content' => $content,
     ]);
-    exit;
 }
 
 $extensions = get_loaded_extensions();
@@ -242,6 +366,31 @@ sort($extensions);
     #logConsole,
     .modal-body {
         user-select: text;
+    }
+
+    /* Security notice above the dashboard window */
+    .security-banner {
+        width: 780px;
+        max-width: 95vw;
+        margin: 12px auto 0;
+        padding: 10px 14px;
+        border: 1px solid #fde68a;
+        background: #fffbeb;
+        color: #92400e;
+        border-radius: 6px;
+        font-size: 12.5px;
+        line-height: 1.5;
+    }
+    .security-banner.danger {
+        border-color: #fecaca;
+        background: #fef2f2;
+        color: #991b1b;
+    }
+    .security-banner code {
+        background: rgba(15, 23, 42, 0.06);
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 11.5px;
     }
 
     /* Main Area & Footer */
@@ -712,6 +861,21 @@ sort($extensions);
 </head>
 <body>
 
+<?php if (!$isLoopbackRequest): ?>
+    <div class="security-banner danger" role="alert">
+        <strong>Dashboard terbuka ke jaringan.</strong>
+        Permintaan dari <code><?= htmlspecialchars($remoteAddr) ?></code> tidak dapat menjalankan aksi lokal
+        (terminal, logs, migrasi, phpinfo). Set <code>[general] host = "127.0.0.1"</code> di
+        <code>app.toml</code> bila akses jaringan tidak diperlukan.
+    </div>
+<?php elseif (!$actionsEnabled): ?>
+    <div class="security-banner" role="status">
+        <strong>Mode tanpa manager.</strong>
+        Aksi dashboard (terminal, logs, migrasi) dinonaktifkan karena dashboard tidak dijalankan oleh Servisan.
+        Start Servisan dan buka dashboard dari tray untuk mengaktifkannya.
+    </div>
+<?php endif; ?>
+
 <main class="app-main">
 <div class="laragon-window">
     <!-- Top Bar -->
@@ -982,7 +1146,7 @@ sort($extensions);
                 <span style="font-size: 12px; color: #64748b; font-weight: normal;">(50 baris terakhir)</span>
             </div>
             <div style="display: flex; gap: 6px;">
-                <button type="button" onclick="fetch('?action=open_logs'); showToast('Membuka folder logs di Explorer...');" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;color:#334155;">Open Folder</button>
+                <button type="button" onclick="openLogsFolder()" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;color:#334155;">Open Folder</button>
                 <button type="button" onclick="loadLogs(currentLogType)" style="background:#0284c7;color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;">Refresh</button>
                 <button type="button" onclick="document.getElementById('logsModal').classList.remove('show')" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;color:#64748b;">✕</button>
             </div>
@@ -1187,19 +1351,49 @@ sort($extensions);
     }
 
     const docRootPath = <?= json_encode($docRoot, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const DASHBOARD_TOKEN = <?= json_encode($dashboardToken, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+
+    /**
+     * Every dashboard action carries the manager token; the server also
+     * rejects non-POST state changes and non-loopback requests.
+     */
+    function dashboardFetch(action, params = {}, options = {}) {
+        const query = new URLSearchParams(Object.assign({ action: action }, params));
+        const opts = Object.assign({ cache: 'no-store' }, options);
+        opts.headers = Object.assign({ 'X-Servisan-Token': DASHBOARD_TOKEN }, options.headers || {});
+
+        return fetch('?' + query.toString(), opts)
+            .then(res => res.json()
+                .catch(() => ({ ok: false, error: 'Respons dashboard tidak valid.' }))
+                .then(data => {
+                    if (!res.ok) {
+                        data.ok = false;
+                        data.error = data.error || ('HTTP ' + res.status);
+                    }
+                    return data;
+                }))
+            .catch(err => ({ ok: false, error: 'Koneksi gagal: ' + err.message }));
+    }
 
     function openTerminal() {
-        fetch('?action=open_terminal')
-            .then(res => {
-                if (res.ok) {
-                    showToast('Membuka Servisan Terminal Shell...');
-                } else {
-                    showTerminalModal();
-                }
-            })
-            .catch(() => {
+        dashboardFetch('open_terminal', {}, { method: 'POST' }).then(data => {
+            if (data.ok) {
+                showToast('Membuka Servisan Terminal Shell...');
+            } else {
                 showTerminalModal();
-            });
+                if (data.error) showToast(data.error);
+            }
+        });
+    }
+
+    function openLogsFolder() {
+        dashboardFetch('open_logs', {}, { method: 'POST' }).then(data => {
+            if (data.ok) {
+                showToast('Membuka folder logs di Explorer...');
+            } else {
+                showToast(data.error || 'Gagal membuka folder logs.');
+            }
+        });
     }
 
     let currentLogType = 'php';
@@ -1220,33 +1414,24 @@ sort($extensions);
     function loadLogs(type) {
         const consoleEl = document.getElementById('logConsole');
         consoleEl.textContent = 'Memuat 50 log terakhir (' + type + '.log)...';
-        fetch('?action=get_logs&type=' + encodeURIComponent(type))
-            .then(res => res.json())
-            .then(data => {
-                if (data.ok) {
-                    consoleEl.textContent = data.content;
-                    consoleEl.scrollTop = consoleEl.scrollHeight;
-                } else {
-                    consoleEl.textContent = 'Gagal memuat log.';
-                }
-            })
-            .catch(err => {
-                consoleEl.textContent = 'Error: ' + err;
-            });
+        dashboardFetch('get_logs', { type: type }).then(data => {
+            if (data.ok) {
+                consoleEl.textContent = data.content;
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            } else {
+                consoleEl.textContent = data.error || 'Gagal memuat log.';
+            }
+        });
     }
 
     function openRoot() {
-        fetch('?action=open_root')
-            .then(res => {
-                if (res.ok) {
-                    showToast('Membuka folder www di File Explorer...');
-                } else {
-                    copyRoot();
-                }
-            })
-            .catch(() => {
+        dashboardFetch('open_root', {}, { method: 'POST' }).then(data => {
+            if (data.ok) {
+                showToast('Membuka folder www di File Explorer...');
+            } else {
                 copyRoot();
-            });
+            }
+        });
     }
 
     function copyRoot() {
@@ -1495,16 +1680,20 @@ sort($extensions);
         }
         container.innerHTML = '';
 
-        const url = fromPath ? ('?action=migrate_scan&from=' + encodeURIComponent(fromPath)) : '?action=migrate_scan';
+        const params = fromPath ? { from: fromPath } : {};
 
-        fetch(url)
-            .then(res => res.json())
+        dashboardFetch('migrate_scan', params)
             .then(data => {
                 loading.style.display = 'none';
                 content.style.display = 'block';
                 migrateScanData = data;
 
-                if (!data.ok || !data.sources || data.sources.length === 0) {
+                if (!data.ok) {
+                    container.innerHTML = `<div style="color:#ef4444;font-size:13px;padding:16px;">${escapeHtml(data.error || 'Gagal memindai server lokal.')}</div>`;
+                    return;
+                }
+
+                if (!data.sources || data.sources.length === 0) {
                     container.innerHTML = `
                         <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:6px;padding:24px;text-align:center;color:#64748b;font-size:13px;">
                             <div style="font-weight:600;color:#334155;margin-bottom:4px;">Tidak ada server lokal atau database terdeteksi</div>
@@ -1597,11 +1786,6 @@ sort($extensions);
 
                 container.innerHTML = html;
                 updateSelectedCount();
-            })
-            .catch(err => {
-                loading.style.display = 'none';
-                content.style.display = 'block';
-                container.innerHTML = `<div style="color:#ef4444;font-size:13px;padding:16px;">Gagal memindai server lokal: ${escapeHtml(err.message)}</div>`;
             });
     }
 
@@ -1696,11 +1880,10 @@ sort($extensions);
             }
         };
 
-        fetch('?action=migrate_import', {
+        dashboardFetch('migrate_import', {}, {
             method: 'POST',
             body: formData,
         })
-        .then(res => res.json())
         .then(res => {
             onFinished();
             if (res.ok) {
@@ -1708,15 +1891,11 @@ sort($extensions);
                 statusEl.textContent = 'Migrasi Selesai';
                 showToast('Proses migrasi database telah selesai!');
             } else {
-                consoleEl.textContent += '\nError: Gagal menjalankan impor.';
+                consoleEl.textContent += '\nError: ' + (res.error || 'Gagal menjalankan impor.');
                 statusEl.textContent = 'Migrasi Gagal';
+                showToast(res.error || 'Gagal menjalankan impor.');
             }
             consoleEl.scrollTop = consoleEl.scrollHeight;
-        })
-        .catch(err => {
-            onFinished();
-            consoleEl.textContent += '\nError koneksi: ' + err.message;
-            statusEl.textContent = 'Terjadi Kesalahan';
         });
     }
 
