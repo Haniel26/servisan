@@ -18,6 +18,13 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # The dashboard regression tests shell out to `php`; without it they skip.
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
       - name: cargo fmt
         run: cargo fmt --check
 

@@ -23,6 +23,39 @@ pub trait HttpEngine {
 /// for local development. Swap the engine in Phase 2 for concurrency.
 pub struct BuiltinServer;
 
+/// Random token handed to the dashboard for CSRF checks on its actions.
+///
+/// The value is only shared with the dashboard page and is regenerated on
+/// every manager start, so other websites cannot forge local actions.
+fn dashboard_token() -> String {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+
+    let mut token = String::with_capacity(32);
+    for _ in 0..2 {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u128(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_nanos())
+                .unwrap_or_default(),
+        );
+        token.push_str(&format!("{:016x}", hasher.finish()));
+    }
+    token
+}
+
+/// Whether the HTTP server only accepts connections from this machine.
+pub fn is_loopback_host(host: &str) -> bool {
+    let host = host.trim().trim_matches(|c| c == '[' || c == ']');
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(false)
+}
+
 impl HttpEngine for BuiltinServer {
     fn name(&self) -> &'static str {
         "php-builtin"
@@ -46,6 +79,7 @@ impl HttpEngine for BuiltinServer {
         cmd.env("SERVISAN_MYSQL_HOST", "127.0.0.1");
         cmd.env("SERVISAN_MYSQL_PORT", cfg.mysql.port.to_string());
         cmd.env("SERVISAN_VERSION", crate::VERSION);
+        cmd.env("SERVISAN_DASHBOARD_TOKEN", dashboard_token());
         paths.apply_path_env(&mut cmd);
         cmd
     }
@@ -70,6 +104,13 @@ impl PhpService {
 
         let cmd = engine.command(paths, cfg);
         let log = paths.logs_dir().join("php.log");
+        if !is_loopback_host(&cfg.general.host) {
+            eprintln!(
+                "warning: dashboard binds to {} and is reachable from other machines; \
+                 dashboard actions stay limited to this computer.",
+                cfg.general.host
+            );
+        }
         let child = ManagedChild::spawn(format!("php ({})", engine.name()), cmd, log)?;
 
         Ok(Self {
@@ -154,6 +195,49 @@ mod tests {
             command_env(&cmd, "SERVISAN_VERSION"),
             Some(crate::VERSION.to_string())
         );
+        let token = command_env(&cmd, "SERVISAN_DASHBOARD_TOKEN").expect("dashboard token");
+        assert_eq!(token.len(), 32);
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn dashboard_token_is_fresh_for_every_start() {
+        let paths = Paths::new(r"D:\ServiSan");
+        let cfg = cfg_for(Path::new("www"), 8080);
+        let first = command_env(
+            &BuiltinServer.command(&paths, &cfg),
+            "SERVISAN_DASHBOARD_TOKEN",
+        );
+        let second = command_env(
+            &BuiltinServer.command(&paths, &cfg),
+            "SERVISAN_DASHBOARD_TOKEN",
+        );
+        assert!(first.is_some());
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn loopback_hosts_are_recognised() {
+        for host in [
+            "127.0.0.1",
+            "127.0.0.53",
+            "localhost",
+            "LOCALHOST",
+            "::1",
+            "[::1]",
+        ] {
+            assert!(is_loopback_host(host), "{host} should be loopback");
+        }
+        for host in [
+            "0.0.0.0",
+            "192.168.1.10",
+            "10.0.0.5",
+            "::",
+            "example.com",
+            "",
+        ] {
+            assert!(!is_loopback_host(host), "{host} should not be loopback");
+        }
     }
 
     #[test]
@@ -169,11 +253,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn dashboard_renders_when_mysql_is_offline() {
+    fn run_php_test(name: &str) {
         let script = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
-            .join("dashboard_offline.php");
+            .join(name);
         let output = match std::process::Command::new("php").arg(&script).output() {
             Ok(output) => output,
             Err(_) => {
@@ -184,10 +267,25 @@ mod tests {
 
         assert!(
             output.status.success(),
-            "dashboard regression test failed:\n{}{}",
+            "{name} failed:\n{}{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    #[test]
+    fn dashboard_renders_when_mysql_is_offline() {
+        run_php_test("dashboard_offline.php");
+    }
+
+    #[test]
+    fn dashboard_actions_require_loopback_post_and_token() {
+        run_php_test("dashboard_security.php");
+    }
+
+    #[test]
+    fn dashboard_cli_args_never_pass_through_a_shell() {
+        run_php_test("dashboard_cli.php");
     }
 
     #[test]
