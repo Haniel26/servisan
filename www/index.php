@@ -176,7 +176,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'open_root') {
     respond_json(200, ['ok' => true]);
 }
 
-function get_servisan_cmd(string $docRoot): string {
+function servisan_executable(string $docRoot): string {
     $rootDir = dirname($docRoot);
     $candidates = [
         $rootDir . DIRECTORY_SEPARATOR . 'servisan.exe',
@@ -185,10 +185,68 @@ function get_servisan_cmd(string $docRoot): string {
     ];
     foreach ($candidates as $candidate) {
         if (file_exists($candidate)) {
-            return escapeshellarg($candidate);
+            return $candidate;
         }
     }
     return 'servisan';
+}
+
+function get_servisan_cmd(string $docRoot): string {
+    $exe = servisan_executable($docRoot);
+    return $exe === 'servisan' ? $exe : escapeshellarg($exe);
+}
+
+/**
+ * Run a command without a shell. An argument array goes straight to the OS,
+ * so database names and folders can never be read as shell syntax.
+ *
+ * stderr goes to a temp file instead of a second pipe: reading one pipe while
+ * the child blocks on a full second pipe would deadlock.
+ *
+ * @param list<string> $command
+ * @return array{stdout: string, stderr: string, output: string, exit_code: int}
+ */
+function run_process_array(array $command): array {
+    if (!function_exists('proc_open')) {
+        return ['stdout' => '', 'stderr' => '', 'output' => 'Fungsi proc_open tidak tersedia di PHP ini.', 'exit_code' => -1];
+    }
+
+    $stderrFile = tempnam(sys_get_temp_dir(), 'servisan-stderr-');
+    if ($stderrFile === false) {
+        return ['stdout' => '', 'stderr' => '', 'output' => 'Gagal membuat file sementara.', 'exit_code' => -1];
+    }
+
+    $descriptors = [
+        1 => ['pipe', 'w'],
+        2 => ['file', $stderrFile, 'w'],
+    ];
+    $process = @proc_open($command, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        @unlink($stderrFile);
+        return ['stdout' => '', 'stderr' => '', 'output' => 'Gagal menjalankan perintah.', 'exit_code' => -1];
+    }
+
+    $stdout = (string) stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $exitCode = proc_close($process);
+
+    $stderr = (string) @file_get_contents($stderrFile);
+    @unlink($stderrFile);
+
+    return [
+        'stdout' => $stdout,
+        'stderr' => $stderr,
+        'output' => trim($stdout . $stderr),
+        'exit_code' => $exitCode,
+    ];
+}
+
+/**
+ * @param list<string> $args
+ * @return array{stdout: string, stderr: string, output: string, exit_code: int}
+ */
+function run_servisan_cli(string $docRoot, array $args): array {
+    return run_process_array(array_merge([servisan_executable($docRoot)], $args));
 }
 
 // Handle open_terminal action (open a shell window via the servisan CLI)
@@ -207,28 +265,38 @@ if (isset($_GET['action']) && $_GET['action'] === 'open_terminal') {
 if (isset($_GET['action']) && $_GET['action'] === 'migrate_scan') {
     require_action_allowed($isLoopbackRequest, $dashboardToken, false, 'migrate_scan');
 
-    $exe = get_servisan_cmd($docRoot);
     $from = normalize_source_path((string) ($_GET['from'] ?? ''));
     if ($from !== '' && !valid_source_path($from)) {
         respond_json(400, ['ok' => false, 'error' => 'Folder sumber tidak ditemukan: ' . $from]);
     }
-    $fromArg = $from !== '' ? ' --from ' . escapeshellarg($from) : '';
-    $output = @shell_exec($exe . ' migrate list' . $fromArg . ' --json 2>&1');
-    $sources = json_decode($output ?? '', true);
-    respond_json(200, [
+
+    $args = ['migrate', 'list'];
+    if ($from !== '') {
+        $args[] = '--from';
+        $args[] = $from;
+    }
+    $args[] = '--json';
+
+    $result = run_servisan_cli($docRoot, $args);
+    $sources = json_decode($result['stdout'], true);
+    $payload = [
         'ok' => is_array($sources),
         'sources' => $sources ?? [],
         'servisan_mysql_ok' => $mysqlOk,
         'from' => $from,
-        'raw' => $output,
-    ]);
+        'raw' => $result['output'],
+        'exit_code' => $result['exit_code'],
+    ];
+    if (!is_array($sources)) {
+        $payload['error'] = 'Gagal memindai database: ' . (trim($result['stderr']) ?: 'output bukan JSON');
+    }
+    respond_json(200, $payload);
 }
 
 // Handle migrate_import action (import selected databases into Servisan MySQL)
 if (isset($_GET['action']) && $_GET['action'] === 'migrate_import') {
     require_action_allowed($isLoopbackRequest, $dashboardToken, true, 'migrate_import');
 
-    $exe = get_servisan_cmd($docRoot);
     $dbs = $_POST['databases'] ?? [];
     if (is_string($dbs)) {
         $dbs = array_filter(array_map('trim', explode(',', $dbs)));
@@ -259,23 +327,29 @@ if (isset($_GET['action']) && $_GET['action'] === 'migrate_import') {
         respond_json(400, ['ok' => false, 'error' => 'Folder sumber tidak ditemukan: ' . $from]);
     }
 
-    $args = '';
+    $args = ['migrate', 'import'];
     if ($from !== '') {
-        $args .= ' --from ' . escapeshellarg($from);
+        $args[] = '--from';
+        $args[] = $from;
     }
     foreach ($dbs as $db) {
-        $args .= ' ' . escapeshellarg($db);
+        $args[] = $db;
     }
     if ($overwrite) {
-        $args .= ' --overwrite';
+        $args[] = '--overwrite';
     }
 
-    $cmd = $exe . ' migrate import' . $args . ' 2>&1';
-    $output = @shell_exec($cmd);
+    $result = run_servisan_cli($docRoot, $args);
+    if ($result['exit_code'] !== 0) {
+        respond_json(500, [
+            'ok' => false,
+            'error' => 'Impor database gagal (exit code ' . $result['exit_code'] . ').',
+            'output' => $result['output'],
+        ]);
+    }
     respond_json(200, [
         'ok' => true,
-        'cmd' => $cmd,
-        'output' => $output ?? '',
+        'output' => $result['output'],
     ]);
 }
 
@@ -1891,6 +1965,9 @@ sort($extensions);
                 statusEl.textContent = 'Migrasi Selesai';
                 showToast('Proses migrasi database telah selesai!');
             } else {
+                if (res.output) {
+                    consoleEl.textContent += res.output + '\n';
+                }
                 consoleEl.textContent += '\nError: ' + (res.error || 'Gagal menjalankan impor.');
                 statusEl.textContent = 'Migrasi Gagal';
                 showToast(res.error || 'Gagal menjalankan impor.');

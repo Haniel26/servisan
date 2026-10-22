@@ -284,6 +284,11 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_cli_args_never_pass_through_a_shell() {
+        run_php_test("dashboard_cli.php");
+    }
+
+    #[test]
     fn builtin_server_actually_serves() {
         let paths = match Paths::discover() {
             Ok(p) => p,
