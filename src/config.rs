@@ -42,8 +42,11 @@ pub struct General {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Php {
-    /// Informational build name, e.g. `php-8.3.30-Win32-vs16-x64`.
+    /// Informational build name, e.g. `php-8.3.36-Win32-vs16-x64`.
     pub version: String,
+    /// Path or folder name of the selected PHP version (relative or absolute).
+    #[serde(default)]
+    pub version_path: Option<String>,
     /// HTTP engine used to serve PHP.
     pub engine: EngineKind,
     /// HTTP port (default 8080 to avoid clashing with Laragon's port 80).
@@ -60,6 +63,9 @@ pub struct Mysql {
     pub version: String,
     /// MySQL port (default 3307 to avoid clashing with Laragon's 3306).
     pub port: u16,
+    /// Apply a local-development memory profile to the generated `my.ini`.
+    #[serde(default = "default_low_memory")]
+    pub low_memory: bool,
 }
 
 /// Selectable HTTP engine. Only `builtin` is implemented in the MVP; the
@@ -98,6 +104,10 @@ fn default_php_workers() -> u32 {
     4
 }
 
+fn default_low_memory() -> bool {
+    true
+}
+
 impl Default for General {
     fn default() -> Self {
         Self {
@@ -112,7 +122,8 @@ impl Default for General {
 impl Default for Php {
     fn default() -> Self {
         Self {
-            version: "php-8.3.30-Win32-vs16-x64".to_string(),
+            version: "php-8.3.36-Win32-vs16-x64".to_string(),
+            version_path: None,
             engine: EngineKind::default(),
             port: 8080,
             workers: default_php_workers(),
@@ -125,6 +136,7 @@ impl Default for Mysql {
         Self {
             version: "mysql-8.4.3-winx64".to_string(),
             port: 3307,
+            low_memory: default_low_memory(),
         }
     }
 }
@@ -188,6 +200,7 @@ mod tests {
         cfg.validate().unwrap();
         assert_eq!(cfg.php.port, 8080);
         assert_eq!(cfg.mysql.port, 3307);
+        assert!(cfg.mysql.low_memory);
         assert_eq!(cfg.php.workers, 4);
         assert_eq!(cfg.php.engine, EngineKind::Builtin);
     }
@@ -196,6 +209,7 @@ mod tests {
     fn partial_toml_fills_defaults() {
         let cfg: Config = toml::from_str("[mysql]\nport = 3399\n").unwrap();
         assert_eq!(cfg.mysql.port, 3399);
+        assert!(cfg.mysql.low_memory);
         assert_eq!(cfg.php.port, 8080);
         assert_eq!(cfg.general.web_root, "www");
     }

@@ -3,12 +3,14 @@ pub mod config;
 pub mod ini;
 pub mod migrate;
 pub mod paths;
+pub mod php;
 pub mod phpmyadmin;
 pub mod platform;
 pub mod process;
 pub mod services;
 pub mod signal;
 pub mod tray;
+pub mod vhost;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

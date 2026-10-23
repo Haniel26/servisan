@@ -7,9 +7,11 @@ use anyhow::{anyhow, Result};
 /// The home directory is discovered relative to the running executable so
 /// that the whole folder stays portable: move it to another drive or machine
 /// and everything keeps working without reconfiguration.
+#[derive(Debug, Clone)]
 pub struct Paths {
     root: PathBuf,
     data_override: Option<PathBuf>,
+    php_override: Option<PathBuf>,
 }
 
 impl Paths {
@@ -18,12 +20,19 @@ impl Paths {
         Self {
             root: root.into(),
             data_override: None,
+            php_override: None,
         }
     }
 
     /// Use a custom data directory instead of `<root>/data`.
     pub fn with_data_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.data_override = Some(dir.into());
+        self
+    }
+
+    /// Use a custom PHP directory instead of `<root>/bin/php`.
+    pub fn with_php_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.php_override = Some(dir.into());
         self
     }
 
@@ -68,6 +77,9 @@ impl Paths {
     }
 
     pub fn php_dir(&self) -> PathBuf {
+        if let Some(ref dir) = self.php_override {
+            return dir.clone();
+        }
         self.bin_dir().join("php")
     }
 
@@ -99,6 +111,10 @@ impl Paths {
 
     pub fn www_dir(&self) -> PathBuf {
         self.root.join("www")
+    }
+
+    pub fn dashboard_dir(&self) -> PathBuf {
+        self.root.join("dashboard")
     }
 
     pub fn data_dir(&self) -> PathBuf {
@@ -195,6 +211,7 @@ mod tests {
             p.config_file(),
             PathBuf::from(r"D:\ServiSan\config\app.toml")
         );
+        assert_eq!(p.dashboard_dir(), PathBuf::from(r"D:\ServiSan\dashboard"));
     }
 
     #[test]

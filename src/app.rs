@@ -44,13 +44,37 @@ impl Running {
             .unwrap_or(false);
         php || mysql
     }
+
+    /// Stop and restart the PHP service using the current App configuration and paths.
+    pub fn restart_php(&mut self, app: &App) -> Result<()> {
+        if let Some(mut php) = self.php.take() {
+            let _ = php.stop();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        let _ = crate::ini::write_all(&app.paths, &app.config);
+        let engine = app.http_engine()?;
+        let php = PhpService::start(&app.paths, &app.config, engine)?;
+        self.php = Some(php);
+        Ok(())
+    }
 }
 
 impl App {
     /// Discover paths and load configuration.
     pub fn load() -> Result<Self> {
-        let paths = Paths::discover()?;
+        let mut paths = Paths::discover()?;
         let config = Config::load_or_default(&paths.config_file())?;
+        if let Some(ref vpath) = config.php.version_path {
+            let target = PathBuf::from(vpath);
+            let resolved = if target.is_absolute() {
+                target
+            } else {
+                paths.root().join(target)
+            };
+            if resolved.is_dir() && resolved.join("php.exe").is_file() {
+                paths = paths.with_php_dir(resolved);
+            }
+        }
         Ok(Self { paths, config })
     }
 
@@ -298,9 +322,13 @@ impl App {
         std::fs::create_dir_all(&web_root)
             .with_context(|| format!("creating {}", web_root.display()))?;
 
+        let dashboard_dir = self.paths.dashboard_dir();
+        std::fs::create_dir_all(&dashboard_dir)
+            .with_context(|| format!("creating {}", dashboard_dir.display()))?;
+
         for (asset, target) in [("logo.ico", "favicon.ico"), ("logo.png", "logo.png")] {
             let source = assets.join(asset);
-            let destination = web_root.join(target);
+            let destination = dashboard_dir.join(target);
             if !source.is_file() {
                 continue;
             }
@@ -315,12 +343,6 @@ impl App {
                     )
                 })?;
             }
-        }
-
-        let index_file = web_root.join("index.php");
-        if !index_file.is_file() {
-            let default_index = include_str!("../www/index.php");
-            let _ = std::fs::write(&index_file, default_index);
         }
 
         Ok(())
@@ -398,7 +420,38 @@ impl App {
         crate::phpmyadmin::open_url(&crate::phpmyadmin::url(&self.config))
     }
 
-    fn http_engine(&self) -> Result<Box<dyn HttpEngine>> {
+    pub fn switch_php(&mut self, target: &str) -> Result<PathBuf> {
+        let path = crate::php::switch_php_version(&self.paths, &mut self.config, target)?;
+        self.paths = self.paths.clone().with_php_dir(&path);
+        Ok(path)
+    }
+
+    pub fn uninstall_php(&self, target: &str) -> Result<PathBuf> {
+        crate::php::uninstall_php_version(&self.paths, &self.config, target)
+    }
+
+    pub fn list_php_versions(&self) -> Vec<crate::php::PhpVersionCandidate> {
+        crate::php::discover_installed_versions(&self.paths, &self.config)
+    }
+
+    pub fn list_vhosts(&self) -> Vec<crate::vhost::VirtualHost> {
+        crate::vhost::load_vhosts(&self.paths)
+    }
+
+    pub fn add_vhost(
+        &self,
+        target_path: &Path,
+        custom_name: Option<&str>,
+        custom_domain: Option<&str>,
+    ) -> Result<crate::vhost::VirtualHost> {
+        crate::vhost::add_virtual_host(&self.paths, target_path, custom_name, custom_domain)
+    }
+
+    pub fn remove_vhost(&self, target_key: &str) -> Result<crate::vhost::VirtualHost> {
+        crate::vhost::remove_virtual_host(&self.paths, target_key)
+    }
+
+    pub fn http_engine(&self) -> Result<Box<dyn HttpEngine>> {
         match self.config.php.engine {
             EngineKind::Builtin => Ok(Box::new(BuiltinServer)),
             EngineKind::Nginx => bail!("php.engine = \"nginx\" is not implemented yet"),

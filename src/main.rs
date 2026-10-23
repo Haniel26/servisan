@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use servisan::app::{App, ServiceKind};
 use servisan::signal;
@@ -47,11 +47,23 @@ enum Command {
         #[command(subcommand)]
         command: PhpMyAdminCommand,
     },
+    /// Manage PHP versions and switch active runtime.
+    #[command(name = "php")]
+    Php {
+        #[command(subcommand)]
+        command: PhpCommand,
+    },
     /// Migrate databases from Laragon, XAMPP, WAMP, or other MySQL installations.
     #[command(name = "migrate")]
     Migrate {
         #[command(subcommand)]
         command: MigrateCommand,
+    },
+    /// Manage Virtual Hosts and linked external projects.
+    #[command(name = "vhost")]
+    Vhost {
+        #[command(subcommand)]
+        command: VhostCommand,
     },
 }
 
@@ -70,6 +82,35 @@ enum PhpMyAdminCommand {
     Status,
     /// Open phpMyAdmin in the browser.
     Open,
+}
+
+#[derive(Subcommand)]
+enum PhpCommand {
+    /// List installed PHP versions and available official downloads.
+    List {
+        /// Output results in JSON format.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Switch active PHP version to a candidate ID, version, or folder.
+    Switch {
+        /// Version ID (e.g. 'php-8.3.36'), version string ('8.3.36'), or full directory path.
+        target: String,
+    },
+    /// Download and install an official PHP runtime (e.g. 8.4, 8.3, 8.2, 8.1, 7.4).
+    Install {
+        /// Target version key (e.g. '8.4', '8.3', '8.2', '8.1', '7.4').
+        version: String,
+        /// Automatically switch to the newly installed version.
+        #[arg(long)]
+        switch: bool,
+    },
+    /// Remove an installed PHP version from bin/php/ (cannot remove the active version).
+    #[command(alias = "remove")]
+    Uninstall {
+        /// Version ID (e.g. 'php-8.3.36') or version string ('8.3.36') to remove.
+        target: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -125,6 +166,35 @@ enum MigrateCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum VhostCommand {
+    /// List all registered virtual hosts and linked projects.
+    List {
+        /// Output discovered virtual hosts in JSON format.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Link an external project directory as a virtual host.
+    Add {
+        /// Path to the project directory.
+        path: String,
+
+        /// Custom project name / subfolder slug (default: auto-detected from directory name).
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Custom local domain (default: <name>.test).
+        #[arg(long)]
+        domain: Option<String>,
+    },
+    /// Remove a virtual host by name or domain.
+    #[command(alias = "remove")]
+    Delete {
+        /// Name or domain of the virtual host to remove.
+        target: String,
+    },
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum ServiceArg {
     Php,
@@ -142,7 +212,7 @@ impl From<ServiceArg> for ServiceKind {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let app = App::load()?;
+    let mut app = App::load()?;
 
     match cli.command {
         None | Some(Command::Tray) => servisan::tray::run(app),
@@ -163,8 +233,105 @@ fn main() -> Result<()> {
             }
             PhpMyAdminCommand::Open => app.open_phpmyadmin(),
         },
+        Some(Command::Php { command }) => run_php(&mut app, command),
         Some(Command::Migrate { command }) => run_migrate(&app, command),
+        Some(Command::Vhost { command }) => run_vhost(&app, command),
         Some(Command::Start { only }) => run_foreground(&app, only.map(ServiceKind::from)),
+    }
+}
+
+/// Handle `servisan php` subcommands.
+fn run_php(app: &mut App, command: PhpCommand) -> Result<()> {
+    match command {
+        PhpCommand::List { json } => {
+            let installed = app.list_php_versions();
+            let available = servisan::php::get_available_download_targets(&installed);
+
+            if json {
+                let out = serde_json::json!({
+                    "installed": installed,
+                    "available": available,
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                return Ok(());
+            }
+
+            println!("=== Installed PHP Versions ===\n");
+            if installed.is_empty() {
+                println!("  No PHP versions found. Run scripts/install-binaries.ps1 or 'servisan php install 8.3'.");
+            } else {
+                for c in &installed {
+                    let active_str = if c.is_active { "* (active)" } else { "  " };
+                    let warn_str = if c.has_security_warning {
+                        format!(
+                            " [SECURITY WARNING: {}]",
+                            c.security_message.as_deref().unwrap_or("Patches available")
+                        )
+                    } else {
+                        String::new()
+                    };
+                    println!(
+                        "  {:10} {:14} {:<8} {}{}",
+                        active_str,
+                        c.version,
+                        c.source,
+                        c.path.display(),
+                        warn_str
+                    );
+                }
+            }
+
+            println!("\n=== Available Official Releases (1-Click Download) ===\n");
+            for a in &available {
+                let status = if a.is_installed {
+                    "[Installed]"
+                } else {
+                    "[Download Ready]"
+                };
+                println!("  {:<6} {:<10} {:<18} {}", a.id, a.version, status, a.note);
+            }
+            println!("\nSwitch active version with: servisan php switch <version-or-id>");
+            println!("Download new version with : servisan php install <id> [--switch]");
+            Ok(())
+        }
+        PhpCommand::Switch { target } => {
+            let new_path = app.switch_php(&target)?;
+            println!(
+                "Successfully switched active PHP to: {}",
+                new_path.display()
+            );
+            println!("Regenerated config/generated/php.ini with updated extension paths.");
+            println!(
+                "Note: If Servisan is running, reload or restart to apply the new PHP runtime."
+            );
+            Ok(())
+        }
+        PhpCommand::Install { version, switch } => {
+            println!("Downloading and installing official PHP {version} from windows.php.net...");
+            let installed_path = servisan::php::download_and_install_php(&app.paths, &version)?;
+            println!(
+                "Successfully installed PHP to: {}",
+                installed_path.display()
+            );
+            if switch {
+                app.switch_php(&installed_path.to_string_lossy())?;
+                println!("Switched active PHP runtime to newly installed version.");
+            } else {
+                println!(
+                    "To activate this version, run: servisan php switch {}",
+                    installed_path.display()
+                );
+            }
+            Ok(())
+        }
+        PhpCommand::Uninstall { target } => {
+            let removed_path = app.uninstall_php(&target)?;
+            println!(
+                "Successfully removed PHP version from: {}",
+                removed_path.display()
+            );
+            Ok(())
+        }
     }
 }
 
@@ -327,4 +494,78 @@ fn run_foreground(app: &App, only: Option<ServiceKind>) -> Result<()> {
     app.stop_running(&mut running)?;
     println!("stopped.");
     Ok(())
+}
+
+/// Handle `servisan vhost` subcommands.
+fn run_vhost(app: &App, command: VhostCommand) -> Result<()> {
+    match command {
+        VhostCommand::List { json } => {
+            let vhosts = app.list_vhosts();
+            if json {
+                println!("{}", serde_json::to_string_pretty(&vhosts)?);
+                return Ok(());
+            }
+
+            println!("=== Servisan Virtual Hosts & Linked Projects ===\n");
+            if vhosts.is_empty() {
+                println!("No virtual hosts registered yet.");
+                println!("Link an external project with: servisan vhost add <path>");
+                return Ok(());
+            }
+
+            for v in &vhosts {
+                let hosts_status = if v.hosts_synced {
+                    "[hosts synced]"
+                } else {
+                    "[hosts pending]"
+                };
+                println!(
+                    "• {:<16} -> http://{}  (or http://localhost:{}/{})",
+                    v.name, v.domain, app.config.php.port, v.name
+                );
+                println!("    Path     : {}", v.target_path.display());
+                println!("    DocRoot  : {} ({})", v.doc_root.display(), v.framework);
+                println!("    Status   : {}\n", hosts_status);
+            }
+            Ok(())
+        }
+        VhostCommand::Add { path, name, domain } => {
+            let target = Path::new(&path);
+            let vhost = app.add_vhost(target, name.as_deref(), domain.as_deref())?;
+            println!("Successfully registered virtual host:");
+            println!("  Name       : {}", vhost.name);
+            println!("  Domain     : http://{}", vhost.domain);
+            println!(
+                "  Localhost  : http://localhost:{}/{}",
+                app.config.php.port, vhost.name
+            );
+            println!(
+                "  DocRoot    : {} ({})",
+                vhost.doc_root.display(),
+                vhost.framework
+            );
+            if vhost.hosts_synced {
+                println!(
+                    "  Hosts file : 127.0.0.1 {} registered in Windows hosts",
+                    vhost.domain
+                );
+            } else {
+                println!("  Hosts file : (Admin permission needed to update C:\\Windows\\System32\\drivers\\etc\\hosts)");
+                println!(
+                    "               You can access it immediately at: http://localhost:{}/{}",
+                    app.config.php.port, vhost.name
+                );
+            }
+            Ok(())
+        }
+        VhostCommand::Delete { target } => {
+            let removed = app.remove_vhost(&target)?;
+            println!(
+                "Successfully removed virtual host: {} ({})",
+                removed.name, removed.domain
+            );
+            println!("Removed junction link from www/{}", removed.name);
+            Ok(())
+        }
+    }
 }

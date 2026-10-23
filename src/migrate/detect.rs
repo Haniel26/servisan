@@ -374,7 +374,7 @@ fn resolve_client_exe(bin_dir: Option<&Path>) -> Option<PathBuf> {
 }
 
 /// Return available Windows drive letters (A–Z) that exist.
-fn available_drives() -> Vec<char> {
+pub fn available_drives() -> Vec<char> {
     let mut drives = Vec::new();
     for letter in b'A'..=b'Z' {
         let path = format!("{}:\\", letter as char);

@@ -171,7 +171,7 @@ if ($useLaragon) {
     Write-Host "Downloading clean official portable runtimes (PHP & MariaDB/MySQL)..." -ForegroundColor Cyan
 
     # Official Windows PHP (8.3 Thread Safe x64)
-    $phpUrl = "https://windows.php.net/downloads/releases/php-8.3.35-Win32-vs16-x64.zip"
+    $phpUrl = "https://windows.php.net/downloads/releases/php-8.3.36-Win32-vs16-x64.zip"
     Download-And-Extract -Url $phpUrl -Destination $PhpDst -Label "PHP 8.3"
 
     # Official MariaDB LTS portable package (Full binary compatibility with MySQL 8.x mysqld / mysqladmin)
@@ -192,8 +192,9 @@ foreach ($dir in @($PhpDst, (Join-Path $MysqlDst 'bin'))) {
     if (Test-Path -LiteralPath $dir) {
         foreach ($dll in $vcDlls) {
             $src = Join-Path $sys32 $dll
-            if (Test-Path -LiteralPath $src) {
-                Copy-Item -LiteralPath $src -Destination (Join-Path $dir $dll) -Force -ErrorAction SilentlyContinue
+            $dst = Join-Path $dir $dll
+            if ((Test-Path -LiteralPath $src) -and (-not (Test-Path -LiteralPath $dst))) {
+                Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction SilentlyContinue
             }
         }
     }

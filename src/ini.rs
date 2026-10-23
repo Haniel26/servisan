@@ -56,10 +56,33 @@ FLUSH PRIVILEGES;
     .to_string()
 }
 
+fn mysql_memory_settings(paths: &Paths, enabled: bool) -> String {
+    if !enabled {
+        return String::new();
+    }
+
+    let mut settings = String::from(
+        "performance_schema=OFF\n\
+         innodb_buffer_pool_size=64M\n\
+         innodb_log_buffer_size=16M\n\
+         table_open_cache=256\n\
+         max_connections=32\n",
+    );
+
+    if paths.is_mariadb() {
+        settings.push_str("key_buffer_size=8M\n");
+        settings.push_str("aria_pagecache_buffer_size=8M\n");
+        settings.push_str("myisam_sort_buffer_size=8M\n");
+    }
+
+    settings
+}
+
 /// Render `my.ini` with absolute, resolved paths so the install stays portable.
 pub fn render_my_ini(paths: &Paths, cfg: &Config) -> String {
     let basedir = forward(&paths.mysql_dir());
     let datadir = forward(&paths.data_dir());
+    let memory = mysql_memory_settings(paths, cfg.mysql.low_memory);
     let x_plugin = if paths.is_mariadb() {
         String::new()
     } else {
@@ -74,13 +97,14 @@ datadir=\"{datadir}\"
 port={port}
 bind-address=127.0.0.1
 skip-name-resolve
-{x_plugin}\
+{memory}{x_plugin}\
 [client]
 port={port}
 ",
         basedir = basedir,
         datadir = datadir,
         port = cfg.mysql.port,
+        memory = memory,
         x_plugin = x_plugin,
     )
 }
@@ -100,7 +124,11 @@ pub fn render_php_ini(paths: &Paths, _cfg: &Config) -> String {
     out.push_str("post_max_size=64M\n");
     out.push_str("display_errors=On\n");
     out.push_str("display_startup_errors=On\n");
-    out.push_str("error_reporting=E_ALL\n\n");
+    out.push_str("error_reporting=E_ALL\n");
+    out.push_str(
+        "# Hardening: disable upload progress to mitigate CVE-2026-109619 stale global state RCE\n",
+    );
+    out.push_str("session.upload_progress.enabled=0\n\n");
 
     for ext in PHP_EXTENSIONS {
         let dll = paths.php_dir().join("ext").join(format!("php_{ext}.dll"));
@@ -160,6 +188,46 @@ mod tests {
         assert!(ini.contains("datadir=\"D:/ServiSan/data\""));
         assert!(ini.contains("port=3307"));
         assert!(!ini.contains('\\'));
+    }
+
+    #[test]
+    fn my_ini_uses_low_memory_profile() {
+        let (paths, cfg) = sample();
+        let ini = render_my_ini(&paths, &cfg);
+        assert!(ini.contains("performance_schema=OFF"));
+        assert!(ini.contains("innodb_buffer_pool_size=64M"));
+        assert!(ini.contains("innodb_log_buffer_size=16M"));
+        assert!(ini.contains("table_open_cache=256"));
+        assert!(ini.contains("max_connections=32"));
+    }
+
+    #[test]
+    fn my_ini_can_disable_low_memory_profile() {
+        let (paths, mut cfg) = sample();
+        cfg.mysql.low_memory = false;
+        let ini = render_my_ini(&paths, &cfg);
+        assert!(!ini.contains("performance_schema=OFF"));
+        assert!(!ini.contains("innodb_buffer_pool_size=64M"));
+    }
+
+    #[test]
+    fn mariadb_ini_uses_low_memory_profile() {
+        let dir = std::env::temp_dir().join("servisan_ini_mariadb_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let bin = dir.join("bin").join("mysql").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("mariadb-install-db.exe"), b"").unwrap();
+
+        let paths = Paths::new(&dir);
+        let cfg = Config::default();
+        let ini = render_my_ini(&paths, &cfg);
+
+        assert!(ini.contains("key_buffer_size=8M"));
+        assert!(ini.contains("aria_pagecache_buffer_size=8M"));
+        assert!(ini.contains("myisam_sort_buffer_size=8M"));
+        assert!(!ini.contains("mysqlx=0"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

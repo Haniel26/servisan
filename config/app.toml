@@ -1,35 +1,21 @@
-# Servisan configuration.
-# All values below are optional; missing fields fall back to built-in defaults.
-
 [general]
-# Web root, relative to the Servisan root directory.
 web_root = "www"
-# Interface the HTTP server binds to.
 host = "127.0.0.1"
-# Open the browser automatically when services start.
 auto_open_browser = true
-# Restart all services automatically when Servisan starts.
 auto_start_all = true
 
 [php]
-# Informational build name (source of the binaries in bin/php).
-version = "php-8.3.30-Win32-vs16-x64"
-# HTTP engine: builtin | nginx | apache  (only "builtin" implemented in MVP).
+version = "PHP 8.5.12"
+version_path = "bin/php/php-8.5.12"
 engine = "builtin"
-# HTTP port. 8080 avoids clashing with Laragon/Apache on port 80.
 port = 8080
-# Number of worker processes for concurrent requests (default 4).
 workers = 4
 
 [mysql]
-# Informational build name (source of the binaries in bin/mysql).
 version = "mysql-8.4.3-winx64"
-# MySQL port. 3307 avoids clashing with Laragon/MySQL on port 3306.
 port = 3307
+low_memory = true
 
 [phpmyadmin]
-# Set enabled = false to ignore phpMyAdmin management.
-# Optional: source folder for 'servisan phpmyadmin install'.
-# If left empty, automatically checks standard Laragon paths (C:\laragon, D:\laragon).
+enabled = true
 source = ""
-

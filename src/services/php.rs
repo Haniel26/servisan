@@ -37,12 +37,24 @@ impl HttpEngine for BuiltinServer {
             cmd.arg("-c").arg(crate::ini::php_ini_path(paths));
         }
         cmd.arg("-S").arg(addr);
-        cmd.arg("-t").arg(root);
+        cmd.arg("-t").arg(&root);
+        let router = paths.dashboard_dir().join("servisan-router.php");
+        if router.is_file() {
+            cmd.arg(router);
+        } else {
+            let root_router = root.join("servisan-router.php");
+            if root_router.is_file() {
+                cmd.arg(root_router);
+            }
+        }
         if cfg.php.workers > 1 {
             cmd.env("PHP_CLI_SERVER_WORKERS", cfg.php.workers.to_string());
         }
         // The dashboard reads these through getenv() so app.toml (MySQL port)
         // and Cargo.toml (version) stay the source of truth.
+        cmd.env("SERVISAN_HOME", paths.root());
+        cmd.env("SERVISAN_DASHBOARD_DIR", paths.dashboard_dir());
+        cmd.env("SERVISAN_WWW_DIR", &root);
         cmd.env("SERVISAN_MYSQL_HOST", "127.0.0.1");
         cmd.env("SERVISAN_MYSQL_PORT", cfg.mysql.port.to_string());
         cmd.env("SERVISAN_VERSION", crate::VERSION);

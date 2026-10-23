@@ -141,6 +141,31 @@ pub fn shell_open(target: &str) -> Result<()> {
     Ok(())
 }
 
+/// Execute a command elevated as Administrator via the Windows shell UAC prompt (`runas` verb).
+pub fn shell_execute_runas(file: &str, params: &str) -> Result<()> {
+    use windows::core::{w, HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    unsafe {
+        let hfile = HSTRING::from(file);
+        let hparams = HSTRING::from(params);
+        let ret = ShellExecuteW(
+            None,
+            w!("runas"),
+            PCWSTR(hfile.as_ptr()),
+            PCWSTR(hparams.as_ptr()),
+            None,
+            SW_HIDE,
+        );
+        let code = ret.0 as isize;
+        if code <= 32 {
+            anyhow::bail!("ShellExecuteW runas failed with error code {code}");
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -67,7 +67,12 @@ Copy-Item -LiteralPath (Join-Path $RepoRoot 'LICENSE') -Destination $Stage -Erro
 Copy-Tree -Source (Join-Path $RepoRoot 'assets') -Destination (Join-Path $Stage 'assets')
 Copy-Tree -Source (Join-Path $RepoRoot 'bin') -Destination (Join-Path $Stage 'bin')
 Copy-Tree -Source (Join-Path $RepoRoot 'config') -Destination (Join-Path $Stage 'config')
-Copy-Tree -Source (Join-Path $RepoRoot 'www') -Destination (Join-Path $Stage 'www')
+Copy-Tree -Source (Join-Path $RepoRoot 'dashboard') -Destination (Join-Path $Stage 'dashboard')
+
+# Prepare clean www folder (pure user projects)
+$stageWww = Join-Path $Stage 'www'
+New-Item -ItemType Directory -Path $stageWww -Force | Out-Null
+New-Item -ItemType File -Path (Join-Path $stageWww '.gitkeep') -Force | Out-Null
 
 # Empty runtime folders. Paired data/logs remain under the portable root.
 New-Item -ItemType Directory -Path (Join-Path $Stage 'data') -Force | Out-Null

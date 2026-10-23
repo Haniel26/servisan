@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-23
+
+### Added
+- **1-Click PHP Version Manager & Switcher (`servisan php`)**:
+  - Multi-source discovery scanning internal runtimes (`bin/php/*`) and Laragon installations on all Windows drives.
+  - 1-Click official downloads from `windows.php.net` (PHP 8.5 Latest, 8.4, 8.3, 8.2, 8.1, 7.4).
+  - Real-time download progress tracking with byte-level polling, elapsed timer, and animated progress bar.
+  - Active CVE security advisory detection (flags unpatched runtimes and suggests 1-click update).
+  - Safe 1-click uninstaller for unused PHP versions while protecting active runtimes and user data.
+  - Added CLI commands: `servisan php list`, `servisan php switch`, `servisan php install`, and `servisan php remove`.
+- **Virtual Host & External Project Manager (`servisan vhost`)**:
+  - Link projects located anywhere on disk (`D:\Project\...`) via Windows Directory Junctions (`mklink /J`) without duplicating files.
+  - Dual access: local domain (`http://app.test:8080`) and subfolder (`http://localhost:8080/app/`).
+  - Automatic framework detection (`public/index.php` for Laravel/Symfony vs standard PHP).
+  - Safe Windows `hosts` file synchronizer with marker blocks and PowerShell UAC elevation fallback.
+  - Added CLI commands: `servisan vhost list`, `servisan vhost add`, and `servisan vhost remove`.
+- **Dedicated Isolated Dashboard Architecture (`dashboard/`)**:
+  - Separated Servisan Web Dashboard completely out of `www/` into dedicated `dashboard/` folder.
+  - `www/` is now strictly reserved for user applications, eliminating internal asset naming collisions.
+  - Dynamic PHP built-in server router (`dashboard/servisan-router.php`) seamlessly routing dashboard and subfolder projects.
+- **Web Dashboard UI Redesign & Start Dock Menu**:
+  - Minimalist header bar with brand logo, title, version badge, and GitHub/Help links.
+  - Modern service grid table with port chips, status pills with dots, and standardized action buttons.
+  - Windows Start Launchpad-style floating flyout menu on the bottom dock with smooth spring slide-up animation.
+  - Dock micro-interactions: subtle hover lift (`translateY(-2px)`) and elevation shadow.
+  - 1-Click Graceful Shutdown Engine: safely terminates MySQL and PHP, stops background tray, and automatically closes the browser tab.
+- **Windows Setup Installer & Portable Packaging**:
+  - Inno Setup compiler integration (`scripts/build-installer.ps1` & `scripts/installer.iss`) producing self-contained installer (`servisan-0.3.0-setup.exe` - ~85 MB).
+  - Portable distribution packager (`scripts/package-portable.ps1`) producing clean ZIP (~173 MB).
+  - Bundled app-local Microsoft Visual C++ runtime DLLs (`vcruntime140.dll`, `msvcp140.dll`).
+
+### Fixed
+- **JavaScript Global Identifier Collision**:
+  - Normalized `CURRENT_VERSION` and `docRootPath` declarations to prevent script-halting `SyntaxError` on modern browsers.
+- **Dropdown Menu Clipping**:
+  - Replaced card `overflow: hidden` with `overflow: visible` and added viewport scroll bounds, preventing menus from being clipped.
+- **Packaging Locked File Guard**:
+  - Hardened packaging scripts against in-use locked DLL errors when development services are running.
+
 ## [0.2.0] - 2026-10-20
 
 ### Added

@@ -8,7 +8,7 @@ putenv('SERVISAN_MYSQL_PORT=54321');
 putenv('SERVISAN_VERSION=0.0.0-test');
 
 ob_start();
-require __DIR__ . '/../www/index.php';
+require __DIR__ . '/../dashboard/index.php';
 $html = (string) ob_get_clean();
 
 $checks = [

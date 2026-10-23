@@ -20,16 +20,20 @@ use crate::app::{App, Running};
 pub enum TrayUserEvent {
     TrayIcon(TrayIconEvent),
     Menu(MenuEvent),
+    ConfigChanged,
 }
 
 const ID_START: &str = "servisan.start";
 const ID_STOP: &str = "servisan.stop";
+const ID_RESTART: &str = "servisan.restart";
 const ID_DASHBOARD: &str = "servisan.dashboard";
 const ID_WWW: &str = "servisan.www";
 const ID_CONFIG: &str = "servisan.config";
 const ID_LOGS: &str = "servisan.logs";
 const ID_PMA: &str = "servisan.phpmyadmin";
 const ID_MIGRATE: &str = "servisan.migrate";
+const ID_PHP: &str = "servisan.php";
+const ID_VHOST: &str = "servisan.vhost";
 const ID_EXIT: &str = "servisan.exit";
 
 /// A user action triggered from the tray menu.
@@ -37,12 +41,15 @@ const ID_EXIT: &str = "servisan.exit";
 pub enum Action {
     StartAll,
     StopAll,
+    RestartAll,
     OpenDashboard,
     OpenWww,
     OpenConfig,
     OpenLogs,
     OpenPhpMyAdmin,
     MigrateDB,
+    ManagePhp,
+    ManageVhost,
     Exit,
 }
 
@@ -51,12 +58,15 @@ fn action_for(id: &str) -> Option<Action> {
     Some(match id {
         ID_START => Action::StartAll,
         ID_STOP => Action::StopAll,
+        ID_RESTART => Action::RestartAll,
         ID_DASHBOARD => Action::OpenDashboard,
         ID_WWW => Action::OpenWww,
         ID_CONFIG => Action::OpenConfig,
         ID_LOGS => Action::OpenLogs,
         ID_PMA => Action::OpenPhpMyAdmin,
         ID_MIGRATE => Action::MigrateDB,
+        ID_PHP => Action::ManagePhp,
+        ID_VHOST => Action::ManageVhost,
         ID_EXIT => Action::Exit,
         _ => return None,
     })
@@ -107,17 +117,36 @@ fn report_error(app: &App, msg: &str) {
 
 /// Apply a tray action to the running services. Shared by the event loop and
 /// tests so the control flow is exercised by both.
-pub fn apply_action(app: &App, running: &mut Option<Running>, action: Action) -> Outcome {
+pub fn apply_action(app: &mut App, running: &mut Option<Running>, action: Action) -> Outcome {
     match action {
-        Action::StartAll => match app.start(None) {
-            Ok(r) => *running = Some(r),
-            Err(e) => report_error(app, &format!("failed to start services: {e:#}")),
-        },
+        Action::StartAll => {
+            if let Ok(new_app) = App::load() {
+                *app = new_app;
+            }
+            match app.start(None) {
+                Ok(r) => *running = Some(r),
+                Err(e) => report_error(app, &format!("failed to start services: {e:#}")),
+            }
+        }
         Action::StopAll => {
             if let Some(mut r) = running.take() {
                 if let Err(e) = app.stop_running(&mut r) {
                     report_error(app, &format!("failed to stop services: {e:#}"));
                 }
+            }
+        }
+        Action::RestartAll => {
+            if let Some(mut r) = running.take() {
+                if let Err(e) = app.stop_running(&mut r) {
+                    report_error(app, &format!("failed to stop services: {e:#}"));
+                }
+            }
+            if let Ok(new_app) = App::load() {
+                *app = new_app;
+            }
+            match app.start(None) {
+                Ok(r) => *running = Some(r),
+                Err(e) => report_error(app, &format!("failed to restart services: {e:#}")),
             }
         }
         Action::OpenDashboard => {
@@ -137,6 +166,18 @@ pub fn apply_action(app: &App, running: &mut Option<Running>, action: Action) ->
             let url = format!("{}?page=migrate", app.web_url());
             if let Err(e) = crate::phpmyadmin::open_url(&url) {
                 report_error(app, &format!("could not open migration page: {e:#}"));
+            }
+        }
+        Action::ManagePhp => {
+            let url = format!("{}?page=php", app.web_url());
+            if let Err(e) = crate::phpmyadmin::open_url(&url) {
+                report_error(app, &format!("could not open PHP manager page: {e:#}"));
+            }
+        }
+        Action::ManageVhost => {
+            let url = format!("{}?page=vhost", app.web_url());
+            if let Err(e) = crate::phpmyadmin::open_url(&url) {
+                report_error(app, &format!("could not open Virtual Hosts page: {e:#}"));
             }
         }
         Action::Exit => {
@@ -172,11 +213,14 @@ fn detach_console() {}
 ///
 /// `MenuItem::new` mints a counter-based id ("0", "1", ...), which `action_for`
 /// could never match: the menu would open but every item would be dead.
-fn actionable_items() -> [MenuItem; 8] {
+fn actionable_items() -> [MenuItem; 11] {
     [
         MenuItem::with_id(ID_START, "Start All", true, None),
         MenuItem::with_id(ID_STOP, "Stop All", false, None),
+        MenuItem::with_id(ID_RESTART, "Restart All", false, None),
         MenuItem::with_id(ID_DASHBOARD, "Open Dashboard", true, None),
+        MenuItem::with_id(ID_PHP, "PHP Version Switcher...", true, None),
+        MenuItem::with_id(ID_VHOST, "Virtual Hosts & Projects...", true, None),
         MenuItem::with_id(ID_MIGRATE, "Migrate Databases...", true, None),
         MenuItem::with_id(ID_WWW, "Open www", true, None),
         MenuItem::with_id(ID_CONFIG, "Open config", true, None),
@@ -186,11 +230,18 @@ fn actionable_items() -> [MenuItem; 8] {
 }
 
 /// Build the context menu with a variable item enabling phpMyAdmin integration.
-pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
-    let [start, stop, dashboard, migrate, www, config, logs, exit] = actionable_items();
+pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem, MenuItem)> {
+    let [start, stop, restart, dashboard, php, vhost, migrate, www, config, logs, exit] =
+        actionable_items();
 
     let menu = Menu::new();
-    menu.append_items(&[&start, &stop, &PredefinedMenuItem::separator(), &dashboard])?;
+    menu.append_items(&[
+        &start,
+        &stop,
+        &restart,
+        &PredefinedMenuItem::separator(),
+        &dashboard,
+    ])?;
 
     if installed {
         let phpmyadmin = MenuItem::with_id(ID_PMA, "Open phpMyAdmin", true, None);
@@ -198,6 +249,8 @@ pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
     }
 
     menu.append_items(&[
+        &php,
+        &vhost,
         &migrate,
         &PredefinedMenuItem::separator(),
         &www,
@@ -207,7 +260,7 @@ pub fn build_menu(installed: bool) -> Result<(Menu, MenuItem, MenuItem)> {
         &exit,
     ])?;
 
-    Ok((menu, start, stop))
+    Ok((menu, start, stop, restart))
 }
 
 pub fn phpmyadmin_item() -> MenuItem {
@@ -241,8 +294,26 @@ pub fn run(app: App) -> Result<()> {
         let _ = proxy.send_event(TrayUserEvent::Menu(event));
     }));
 
+    let proxy_watcher = event_loop.create_proxy();
+    let config_watch_path = app.paths.config_file();
+    std::thread::spawn(move || {
+        let mut last_mtime = std::fs::metadata(&config_watch_path)
+            .and_then(|m| m.modified())
+            .ok();
+        loop {
+            std::thread::sleep(Duration::from_millis(500));
+            let mtime = std::fs::metadata(&config_watch_path)
+                .and_then(|m| m.modified())
+                .ok();
+            if mtime.is_some() && mtime != last_mtime {
+                last_mtime = mtime;
+                let _ = proxy_watcher.send_event(TrayUserEvent::ConfigChanged);
+            }
+        }
+    });
+
     let installed = app.phpmyadmin_installed();
-    let (menu, start, stop) = build_menu(installed)?;
+    let (menu, start, stop, restart) = build_menu(installed)?;
 
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
@@ -253,6 +324,11 @@ pub fn run(app: App) -> Result<()> {
 
     let mut running: Option<Running> = None;
     let mut last_active: Option<bool> = None;
+    let mut app = app;
+    let config_file = app.paths.config_file();
+    let mut last_config_mtime = std::fs::metadata(&config_file)
+        .and_then(|m| m.modified())
+        .ok();
 
     if app.config.general.auto_start_all {
         match app.start(None) {
@@ -274,6 +350,7 @@ pub fn run(app: App) -> Result<()> {
         }));
         start.set_enabled(!active);
         stop.set_enabled(active);
+        restart.set_enabled(active);
     }
 
     detach_console();
@@ -292,14 +369,27 @@ pub fn run(app: App) -> Result<()> {
                     return;
                 };
 
-                if apply_action(&app, &mut running, action) == Outcome::Exit {
+                if apply_action(&mut app, &mut running, action) == Outcome::Exit {
                     *control_flow = ControlFlow::ExitWithCode(0);
                     return;
                 }
             }
             #[cfg(target_os = "windows")]
             Event::UserEvent(TrayUserEvent::TrayIcon(TrayIconEvent::DoubleClick { .. })) => {
-                let _ = apply_action(&app, &mut running, Action::OpenDashboard);
+                let _ = apply_action(&mut app, &mut running, Action::OpenDashboard);
+            }
+            Event::UserEvent(TrayUserEvent::ConfigChanged) => {
+                if let Ok(new_app) = App::load() {
+                    let php_path_changed = new_app.paths.php_dir() != app.paths.php_dir();
+                    app = new_app;
+                    if php_path_changed {
+                        if let Some(ref mut r) = running {
+                            if r.any_alive() {
+                                let _ = r.restart_php(&app);
+                            }
+                        }
+                    }
+                }
             }
             Event::NewEvents(_) => {
                 while let Ok(menu_event) = MenuEvent::receiver().try_recv() {
@@ -311,13 +401,32 @@ pub fn run(app: App) -> Result<()> {
                         continue;
                     };
 
-                    if apply_action(&app, &mut running, action) == Outcome::Exit {
+                    if apply_action(&mut app, &mut running, action) == Outcome::Exit {
                         *control_flow = ControlFlow::ExitWithCode(0);
                         return;
                     }
                 }
             }
             _ => {}
+        }
+
+        // Detect on-disk configuration changes (e.g. PHP version switch) and hot-reload PHP
+        let current_mtime = std::fs::metadata(&config_file)
+            .and_then(|m| m.modified())
+            .ok();
+        if current_mtime.is_some() && current_mtime != last_config_mtime {
+            last_config_mtime = current_mtime;
+            if let Ok(new_app) = App::load() {
+                let php_path_changed = new_app.paths.php_dir() != app.paths.php_dir();
+                app = new_app;
+                if php_path_changed {
+                    if let Some(ref mut r) = running {
+                        if r.any_alive() {
+                            let _ = r.restart_php(&app);
+                        }
+                    }
+                }
+            }
         }
 
         // Refresh status indicator / menu state on change.
@@ -334,6 +443,7 @@ pub fn run(app: App) -> Result<()> {
             }));
             start.set_enabled(!active);
             stop.set_enabled(active);
+            restart.set_enabled(active);
         }
     });
 }
@@ -346,11 +456,15 @@ mod tests {
     fn maps_menu_ids_to_actions() {
         assert_eq!(action_for(ID_START), Some(Action::StartAll));
         assert_eq!(action_for(ID_STOP), Some(Action::StopAll));
+        assert_eq!(action_for(ID_RESTART), Some(Action::RestartAll));
         assert_eq!(action_for(ID_DASHBOARD), Some(Action::OpenDashboard));
         assert_eq!(action_for(ID_WWW), Some(Action::OpenWww));
         assert_eq!(action_for(ID_CONFIG), Some(Action::OpenConfig));
         assert_eq!(action_for(ID_LOGS), Some(Action::OpenLogs));
         assert_eq!(action_for(ID_PMA), Some(Action::OpenPhpMyAdmin));
+        assert_eq!(action_for(ID_MIGRATE), Some(Action::MigrateDB));
+        assert_eq!(action_for(ID_PHP), Some(Action::ManagePhp));
+        assert_eq!(action_for(ID_VHOST), Some(Action::ManageVhost));
         assert_eq!(action_for(ID_EXIT), Some(Action::Exit));
         assert_eq!(action_for("unknown"), None);
     }
@@ -374,9 +488,10 @@ mod tests {
 
     #[test]
     fn built_menu_items_reach_the_expected_actions() {
-        let (_menu, start, stop) = build_menu(false).unwrap();
+        let (_menu, start, stop, restart) = build_menu(false).unwrap();
         assert_eq!(action_for(start.id().as_ref()), Some(Action::StartAll));
         assert_eq!(action_for(stop.id().as_ref()), Some(Action::StopAll));
+        assert_eq!(action_for(restart.id().as_ref()), Some(Action::RestartAll));
     }
 
     #[test]
@@ -404,7 +519,7 @@ mod tests {
         let _guard = crate::HEAVY_TEST_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        let app = match App::load() {
+        let mut app = match App::load() {
             Ok(a) => a,
             Err(_) => return,
         };
@@ -415,7 +530,7 @@ mod tests {
 
         let mut running = None;
         assert_eq!(
-            apply_action(&app, &mut running, Action::StartAll),
+            apply_action(&mut app, &mut running, Action::StartAll),
             Outcome::Continue
         );
         assert!(
@@ -424,7 +539,7 @@ mod tests {
         );
 
         assert_eq!(
-            apply_action(&app, &mut running, Action::StopAll),
+            apply_action(&mut app, &mut running, Action::StopAll),
             Outcome::Continue
         );
         assert!(
