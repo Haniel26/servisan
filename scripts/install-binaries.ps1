@@ -76,12 +76,32 @@ function Download-And-Extract {
     Write-Host "  Downloading $Label..." -ForegroundColor Cyan
     Write-Host "  From: $Url" -ForegroundColor DarkGray
     
-    $webClient = New-Object System.Net.WebClient
-    $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ServisanInstaller/1.0")
-    $webClient.DownloadFile($Url, $tempZip)
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    $tar  = Get-Command tar.exe -ErrorAction SilentlyContinue
+
+    if ($curl) {
+        & curl.exe -L -f -s -S -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ServisanInstaller/1.0" -o $tempZip $Url
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "curl download failed, falling back to WebClient..."
+            $webClient = New-Object System.Net.WebClient
+            $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ServisanInstaller/1.0")
+            $webClient.DownloadFile($Url, $tempZip)
+        }
+    } else {
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ServisanInstaller/1.0")
+        $webClient.DownloadFile($Url, $tempZip)
+    }
 
     Write-Host "  Extracting $Label..." -ForegroundColor Cyan
-    Expand-Archive -LiteralPath $tempZip -DestinationPath $extractTmp -Force
+    if (-not (Test-Path -LiteralPath $extractTmp)) {
+        New-Item -ItemType Directory -Path $extractTmp -Force | Out-Null
+    }
+    if ($tar) {
+        & tar.exe -xf $tempZip -C $extractTmp
+    } else {
+        Expand-Archive -LiteralPath $tempZip -DestinationPath $extractTmp -Force
+    }
 
     $sourceDir = $extractTmp
     if ($SubFolder -ne '') {
@@ -174,9 +194,9 @@ if ($useLaragon) {
     $phpUrl = "https://windows.php.net/downloads/releases/php-8.3.36-Win32-vs16-x64.zip"
     Download-And-Extract -Url $phpUrl -Destination $PhpDst -Label "PHP 8.3"
 
-    # Official MariaDB LTS portable package (Full binary compatibility with MySQL 8.x mysqld / mysqladmin)
-    $dbUrl = "https://archive.mariadb.org/mariadb-11.4.5/winx64-packages/mariadb-11.4.5-winx64.zip"
-    Download-And-Extract -Url $dbUrl -Destination $MysqlDst -SubFolder "mariadb-" -Label "MySQL/MariaDB Server"
+    # Official Oracle MySQL Community Server 8.4 LTS Windows x64 ZIP
+    $dbUrl = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.3-winx64.zip"
+    Download-And-Extract -Url $dbUrl -Destination $MysqlDst -SubFolder "mysql-8.4" -Label "MySQL 8.4 LTS Community Server"
 
     if ($IncludePhpMyAdmin) {
         $pmaUrl = "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.zip"
