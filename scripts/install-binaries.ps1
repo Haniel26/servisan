@@ -76,20 +76,22 @@ function Download-And-Extract {
     Write-Host "  Downloading $Label..." -ForegroundColor Cyan
     Write-Host "  From: $Url" -ForegroundColor DarkGray
     
+    $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     $tar  = Get-Command tar.exe -ErrorAction SilentlyContinue
 
+    $downloadSuccess = $false
     if ($curl) {
-        & curl.exe -L -f -s -S -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ServisanInstaller/1.0" -o $tempZip $Url
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "curl download failed, falling back to WebClient..."
-            $webClient = New-Object System.Net.WebClient
-            $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ServisanInstaller/1.0")
-            $webClient.DownloadFile($Url, $tempZip)
+        & curl.exe -L -k -s -S -A $userAgent -o $tempZip $Url
+        if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $tempZip) -and ((Get-Item $tempZip).Length -gt 100000)) {
+            $downloadSuccess = $true
         }
-    } else {
+    }
+
+    if (-not $downloadSuccess) {
+        Write-Host "  Using WebClient fallback..." -ForegroundColor Yellow
         $webClient = New-Object System.Net.WebClient
-        $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ServisanInstaller/1.0")
+        $webClient.Headers.Add("User-Agent", $userAgent)
         $webClient.DownloadFile($Url, $tempZip)
     }
 
@@ -97,9 +99,14 @@ function Download-And-Extract {
     if (-not (Test-Path -LiteralPath $extractTmp)) {
         New-Item -ItemType Directory -Path $extractTmp -Force | Out-Null
     }
+    $extractSuccess = $false
     if ($tar) {
-        & tar.exe -xf $tempZip -C $extractTmp
-    } else {
+        & tar.exe -xf $tempZip -C $extractTmp 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $extractSuccess = $true
+        }
+    }
+    if (-not $extractSuccess) {
         Expand-Archive -LiteralPath $tempZip -DestinationPath $extractTmp -Force
     }
 
@@ -194,8 +201,8 @@ if ($useLaragon) {
     $phpUrl = "https://windows.php.net/downloads/releases/php-8.3.36-Win32-vs16-x64.zip"
     Download-And-Extract -Url $phpUrl -Destination $PhpDst -Label "PHP 8.3"
 
-    # Official Oracle MySQL Community Server 8.4 LTS Windows x64 ZIP
-    $dbUrl = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.3-winx64.zip"
+    # Official Oracle MySQL Community Server 8.4 LTS Windows x64 ZIP (Direct CDN Archive)
+    $dbUrl = "https://cdn.mysql.com/archives/mysql-8.4/mysql-8.4.3-winx64.zip"
     Download-And-Extract -Url $dbUrl -Destination $MysqlDst -SubFolder "mysql-8.4" -Label "MySQL 8.4 LTS Community Server"
 
     if ($IncludePhpMyAdmin) {
