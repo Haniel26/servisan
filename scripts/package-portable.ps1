@@ -89,7 +89,7 @@ if (Test-Path -LiteralPath (Join-Path $RepoRoot 'scripts')) {
 Write-Host "Bundling Visual C++ runtime DLLs (App-Local)..." -ForegroundColor Cyan
 $vcDlls = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcomp140.dll')
 $sys32 = "$env:SystemRoot\System32"
-foreach ($dir in @($Stage, (Join-Path $Stage 'bin\php'), (Join-Path $Stage 'bin\mysql\bin'))) {
+foreach ($dir in @((Join-Path $Stage 'bin\php'), (Join-Path $Stage 'bin\mysql\bin'))) {
     if (Test-Path -LiteralPath $dir) {
         foreach ($dll in $vcDlls) {
             $src = Join-Path $sys32 $dll
